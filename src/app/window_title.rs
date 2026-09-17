@@ -6,8 +6,8 @@
 //! what window managers show in tab and group bars.
 //!
 //! The title is rendered on the server so `{hostname}` names the host the panes
-//! actually live on, not the machine a thin remote client runs on. The server
-//! pushes the result to the foreground client, which writes the `OSC 0`.
+//! actually live on. The server pushes the result to the foreground client,
+//! which writes the `OSC 0`.
 
 use super::App;
 use crate::config::{WindowTitlePart, WindowTitleTemplate, WindowTitleToken};

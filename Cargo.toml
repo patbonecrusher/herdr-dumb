@@ -20,6 +20,10 @@ include = [
     "Cargo.toml",
 ]
 
+[[bin]]
+name = "herdr-dumb"
+path = "src/main.rs"
+
 [dependencies]
 base64 = "0.22.1"
 bincode = { version = "2", features = ["serde"] }

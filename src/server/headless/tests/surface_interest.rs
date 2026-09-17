@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::client::endpoint::{
     ClientEndpointId, ClientEndpointStatus, EndpointNegotiation, EndpointRegistry,
-    EndpointTransport, ProfileId, SavedSshEndpoint,
+    EndpointTransport, TestEndpoint, TestEndpointId,
 };
 
 #[derive(Clone)]
@@ -559,18 +559,16 @@ async fn two_headless_servers_drive_atomic_endpoint_handoff() {
             .expect("real target metadata snapshot"),
     ));
 
-    let profile = SavedSshEndpoint {
-        id: ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+    let profile = TestEndpoint {
+        id: TestEndpointId::parse("0123456789abcdef0123456789abcdef").unwrap(),
         label: "Remote".into(),
-        target: "dev@example.com".into(),
-        session: "main".into(),
         enabled: true,
     };
-    let target_id = ClientEndpointId::Ssh(profile.id.clone());
+    let target_id = ClientEndpointId::Test(profile.id.clone());
     let mut shell = crate::client::ClientShellState::new(
         crate::client::ClientShellConfig::from_config(&crate::config::Config::default()),
     );
-    shell.set_endpoint_catalog(&[profile]);
+    shell.set_test_endpoints(&[profile]);
     shell.set_snapshot(source_snapshot);
     shell.set_endpoint_status(&target_id, ClientEndpointStatus::Online);
     shell.set_endpoint_snapshot(&target_id, remote_snapshot);

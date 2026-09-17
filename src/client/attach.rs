@@ -9,7 +9,6 @@ use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
 #[cfg(unix)]
 use super::write_to_server;
 #[cfg(unix)]
-#[cfg(unix)]
 use crate::protocol::{AttachScrollDirection, AttachScrollSource, ClientMessage};
 
 #[derive(Debug, Default)]

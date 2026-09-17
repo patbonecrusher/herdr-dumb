@@ -440,8 +440,9 @@ mod tests {
 
     #[test]
     fn endpoint_lanes_complete_independently() {
-        let remote = ClientEndpointId::Ssh(
-            crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+        let remote = ClientEndpointId::Test(
+            crate::client::endpoint::TestEndpointId::parse("0123456789abcdef0123456789abcdef")
+                .unwrap(),
         );
         let mut commands = commands_with_in_flight();
         commands.lanes.insert(
@@ -478,8 +479,9 @@ mod tests {
 
     #[test]
     fn retiring_complete_source_lane_cancels_queued_ids_and_keeps_other_lanes() {
-        let remote = ClientEndpointId::Ssh(
-            crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+        let remote = ClientEndpointId::Test(
+            crate::client::endpoint::TestEndpointId::parse("0123456789abcdef0123456789abcdef")
+                .unwrap(),
         );
         let mut commands = commands_with_in_flight();
         commands
@@ -584,8 +586,9 @@ mod tests {
     #[test]
     fn stale_or_unknown_responses_do_not_damage_the_live_lane() {
         let mut commands = commands_with_in_flight();
-        let unknown = ClientEndpointId::Ssh(
-            crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+        let unknown = ClientEndpointId::Test(
+            crate::client::endpoint::TestEndpointId::parse("0123456789abcdef0123456789abcdef")
+                .unwrap(),
         );
 
         assert!(commands

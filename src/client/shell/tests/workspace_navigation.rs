@@ -280,7 +280,7 @@ fn mouse_clicks_cancel_remote_workspace_navigation() {
 #[test]
 fn single_machine_compact_navigation_includes_visible_collapsed_group_children() {
     let (mut state, _) = navigation_state(grouped_workspaces());
-    state.set_endpoint_catalog(&[]);
+    state.set_test_endpoints(&[]);
     state.toggle_collapsed_group(&ClientEndpointId::Local, "repo".into());
     state.sidebar_collapsed = true;
     state.compose(100, 28).unwrap();
@@ -368,11 +368,11 @@ fn foreign_preview_survives_local_updates_and_rejects_stale_enter() {
         match invalidation {
             "offline" => state.set_endpoint_status(&remote_id, ClientEndpointStatus::Reconnecting),
             "disabled" => {
-                let mut profile = remote_profile();
+                let mut profile = test_profile();
                 profile.enabled = false;
-                state.set_endpoint_catalog(&[profile]);
+                state.set_test_endpoints(&[profile]);
             }
-            "removed" => state.set_endpoint_catalog(&[]),
+            "removed" => state.set_test_endpoints(&[]),
             "deleted" => {
                 remote.revision += 1;
                 remote.workspaces.pop();

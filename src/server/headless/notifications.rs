@@ -554,6 +554,7 @@ impl HeadlessServer {
 
                 true
             }
+            #[cfg(test)]
             AppEvent::UpdateReady {
                 version,
                 install_command,

@@ -127,11 +127,6 @@ impl EndpointRegistry {
                 .is_some_and(|connection| connection.surface_active)
     }
 
-    pub(crate) fn select_unavailable_local(&mut self) {
-        self.active = ClientEndpointId::Local;
-        self.freeze_input();
-    }
-
     pub(crate) fn freeze_input(&mut self) {
         self.input_enabled = false;
     }
@@ -391,8 +386,8 @@ mod tests {
         )
     }
 
-    fn profile() -> crate::client::endpoint::ProfileId {
-        crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap()
+    fn profile() -> crate::client::endpoint::TestEndpointId {
+        crate::client::endpoint::TestEndpointId::parse("0123456789abcdef0123456789abcdef").unwrap()
     }
 
     #[test]
@@ -406,7 +401,7 @@ mod tests {
             1,
             negotiation(),
         );
-        let ssh_id = ClientEndpointId::Ssh(profile());
+        let ssh_id = ClientEndpointId::Test(profile());
         registry.insert(
             ssh_id.clone(),
             FakeTransport {
@@ -445,7 +440,7 @@ mod tests {
             1,
             negotiation(),
         );
-        let ssh_id = ClientEndpointId::Ssh(profile());
+        let ssh_id = ClientEndpointId::Test(profile());
         registry.insert(
             ssh_id.clone(),
             FakeTransport {
@@ -502,7 +497,7 @@ mod tests {
             1,
             negotiation(),
         );
-        let ssh_id = ClientEndpointId::Ssh(profile());
+        let ssh_id = ClientEndpointId::Test(profile());
         let sent = Arc::new(Mutex::new(Vec::new()));
         registry.insert(
             ssh_id.clone(),
@@ -540,7 +535,7 @@ mod tests {
             1,
             negotiation(),
         );
-        let ssh_id = ClientEndpointId::Ssh(profile());
+        let ssh_id = ClientEndpointId::Test(profile());
         registry.insert(
             ssh_id.clone(),
             FakeTransport {
@@ -591,7 +586,7 @@ mod tests {
             negotiation(),
         );
         registry.insert(
-            ClientEndpointId::Ssh(profile()),
+            ClientEndpointId::Test(profile()),
             FakeTransport {
                 sent: remote_sent.clone(),
                 error: None,

@@ -72,15 +72,14 @@ fn mobile_layout_reserves_only_client_header() {
 #[test]
 fn mobile_switcher_can_activate_an_online_saved_machine() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    let profile = crate::client::endpoint::SavedSshEndpoint {
-        id: crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+    let profile = crate::client::endpoint::TestEndpoint {
+        id: crate::client::endpoint::TestEndpointId::parse("0123456789abcdef0123456789abcdef")
+            .unwrap(),
         label: "Build".into(),
-        target: "build".into(),
-        session: "agents".into(),
         enabled: true,
     };
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
     state.set_snapshot(Box::new(snapshot()));
     state.set_pane_surface(surface());

@@ -1447,6 +1447,7 @@ impl AppState {
                 Vec::new()
             }
             AppEvent::WorktreeRuntimeRestoreFailed { .. } => Vec::new(),
+            #[cfg(test)]
             AppEvent::UpdateReady {
                 version,
                 install_command,
@@ -1469,6 +1470,7 @@ impl AppState {
                 }
                 Vec::new()
             }
+            #[cfg(test)]
             AppEvent::AgentDetectionManifestsUpdated {
                 updated, status, ..
             } => {
@@ -3832,7 +3834,7 @@ mod tests {
         assert_eq!(toast.title, "v0.5.0 available");
         assert_eq!(
             toast.context,
-            "detach, run `herdr update`, then run Herdr again to reconnect"
+            "Updates are disabled in `herdr-dumb`; rebuild and install manually."
         );
     }
 
@@ -3853,7 +3855,7 @@ mod tests {
         let toast = state.toast.as_ref().expect("update toast");
         assert_eq!(
             toast.context,
-            "detach, run `brew update && brew upgrade herdr`, then run Herdr again to reconnect"
+            "Updates are disabled in `herdr-dumb`; rebuild and install manually."
         );
     }
 

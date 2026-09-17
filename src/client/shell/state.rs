@@ -8,7 +8,6 @@ const ENDPOINT_ERROR_TIMEOUT_SECS: u64 = 5;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClientShellKeybindingSource {
     Local,
-    RemoteLocal,
     Endpoint,
 }
 
@@ -858,7 +857,8 @@ pub(crate) struct ClientShellState {
     pub(super) workspace_press: Option<ClientWorkspacePress>,
     pub(super) tab_press: Option<ClientTabPress>,
     pub(super) collapsed_groups: HashSet<String>,
-    pub(super) remote_collapsed_groups: HashMap<ClientEndpointId, HashSet<String>>,
+    #[cfg(test)]
+    pub(super) test_collapsed_groups: HashMap<ClientEndpointId, HashSet<String>>,
     pub(super) workspace_scroll: usize,
     pub(super) agent_scroll: usize,
     pub(super) tab_scroll: usize,
@@ -985,16 +985,6 @@ impl ClientShellState {
         if let Some(sort) = preferences.agent_panel_sort {
             config.agent_panel_sort = sort;
         }
-        let mut remote_collapsed_groups = HashMap::<ClientEndpointId, HashSet<String>>::new();
-        for saved in preferences.remote_collapsed_groups {
-            let Ok(profile_id) = crate::client::endpoint::ProfileId::parse(saved.profile_id) else {
-                continue;
-            };
-            remote_collapsed_groups
-                .entry(ClientEndpointId::Ssh(profile_id))
-                .or_default()
-                .extend(saved.collapsed_groups);
-        }
         Self {
             config,
             snapshot: None,
@@ -1020,7 +1010,8 @@ impl ClientShellState {
             workspace_press: None,
             tab_press: None,
             collapsed_groups: preferences.collapsed_groups.into_iter().collect(),
-            remote_collapsed_groups,
+            #[cfg(test)]
+            test_collapsed_groups: HashMap::new(),
             workspace_scroll: 0,
             agent_scroll: 0,
             tab_scroll: 0,
@@ -1116,13 +1107,13 @@ impl ClientShellState {
 
     pub(super) fn collapsed_groups_for_endpoint(
         &self,
-        endpoint_id: &ClientEndpointId,
+        _endpoint_id: &ClientEndpointId,
     ) -> Option<&HashSet<String>> {
-        if endpoint_id.is_local() {
-            Some(&self.collapsed_groups)
-        } else {
-            self.remote_collapsed_groups.get(endpoint_id)
+        #[cfg(test)]
+        if !_endpoint_id.is_local() {
+            return self.test_collapsed_groups.get(_endpoint_id);
         }
+        Some(&self.collapsed_groups)
     }
 
     pub(super) fn group_is_collapsed(&self, endpoint_id: &ClientEndpointId, key: &str) -> bool {
@@ -1130,12 +1121,14 @@ impl ClientShellState {
             .is_some_and(|groups| groups.contains(key))
     }
 
-    pub(super) fn toggle_collapsed_group(&mut self, endpoint_id: &ClientEndpointId, key: String) {
-        let groups = if endpoint_id.is_local() {
-            &mut self.collapsed_groups
+    pub(super) fn toggle_collapsed_group(&mut self, _endpoint_id: &ClientEndpointId, key: String) {
+        let groups = &mut self.collapsed_groups;
+        #[cfg(test)]
+        let groups = if _endpoint_id.is_local() {
+            groups
         } else {
-            self.remote_collapsed_groups
-                .entry(endpoint_id.clone())
+            self.test_collapsed_groups
+                .entry(_endpoint_id.clone())
                 .or_default()
         };
         if !groups.remove(&key) {
@@ -1266,6 +1259,7 @@ impl ClientShellState {
         let graphics_scope = match &self.active_endpoint_id {
             // Local direct uploads use image IDs authored by the server from its boot ID.
             ClientEndpointId::Local => snapshot.boot_id.clone(),
+            #[cfg(test)]
             endpoint_id => format!("{}:{}", endpoint_id.storage_key(), snapshot.boot_id),
         };
         let endpoint_boot_changed =
@@ -1311,14 +1305,12 @@ impl ClientShellState {
                         .as_ref()
                         .is_none_or(|current| current.commands != snapshot.commands)
             }
-            ClientShellKeybindingSource::RemoteLocal => false,
         };
         let active_keymap_changed = match self.config.keybinding_source {
             ClientShellKeybindingSource::Local => command_bindings_changed,
             ClientShellKeybindingSource::Endpoint => {
                 endpoint_profile_changed || command_bindings_changed
             }
-            ClientShellKeybindingSource::RemoteLocal => false,
         };
         self.config_diagnostic = super::config::merged_config_diagnostic(
             self.local_config_diagnostic.as_deref(),

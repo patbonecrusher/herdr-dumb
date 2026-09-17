@@ -103,10 +103,6 @@ herdr
 
 操作系统或外层终端可能在 Herdr 收到按键前就拦截了组合键。请在对应层释放该组合键，或改用其他绑定。已知冲突和安全默认值见[键盘](/zh-cn/docs/keyboard/#going-prefix-free)。
 
-## 远程连接无法认证
-
-先用 `ssh <host>` 确认普通 OpenSSH 连接正常。若在非交互 shell、CI 或移动终端中使用带密码的密钥，请在远程连接前把密钥载入 `ssh-agent`。见[持久化和远程访问](/zh-cn/docs/persistence-remote/#remote-attach-over-ssh)。
-
 ## 查找诊断日志
 
 Herdr 日志默认位于 `~/.config/herdr/`:

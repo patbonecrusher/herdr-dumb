@@ -91,15 +91,14 @@ fn worktree_created_result() -> crate::api::schema::ResponseResult {
 }
 
 fn add_remote(state: &mut ClientShellState) -> ClientEndpointId {
-    let profile = crate::client::endpoint::SavedSshEndpoint {
-        id: crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+    let profile = crate::client::endpoint::TestEndpoint {
+        id: crate::client::endpoint::TestEndpointId::parse("0123456789abcdef0123456789abcdef")
+            .unwrap(),
         label: "Build".into(),
-        target: "dev@build.example".into(),
-        session: "agents".into(),
         enabled: true,
     };
-    let remote = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let remote = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&remote, ClientEndpointStatus::Online);
     let mut projection = snapshot();
     projection.boot_id = "remote-boot".into();
@@ -477,8 +476,8 @@ fn cancelled_link_activation_does_not_replay_mouse_input() {
 #[test]
 fn another_machine_disconnect_does_not_cancel_active_popup() {
     let (mut state, _) = pending_popup();
-    let remote = ClientEndpointId::Ssh(
-        crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+    let remote = ClientEndpointId::Test(
+        crate::client::endpoint::TestEndpointId::parse("0123456789abcdef0123456789abcdef").unwrap(),
     );
     state.mark_endpoint_disconnected(&remote);
     assert!(state.popup_pending);

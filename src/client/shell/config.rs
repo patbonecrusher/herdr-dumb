@@ -32,22 +32,6 @@ impl ClientShellState {
         };
         let mut collapsed_groups = self.collapsed_groups.iter().cloned().collect::<Vec<_>>();
         collapsed_groups.sort();
-        let mut remote_collapsed_groups = self
-            .remote_collapsed_groups
-            .iter()
-            .filter_map(|(endpoint_id, groups)| {
-                let ClientEndpointId::Ssh(profile_id) = endpoint_id else {
-                    return None;
-                };
-                let mut collapsed_groups = groups.iter().cloned().collect::<Vec<_>>();
-                collapsed_groups.sort();
-                (!collapsed_groups.is_empty()).then(|| preferences::ClientRemoteCollapsedGroups {
-                    profile_id: profile_id.to_string(),
-                    collapsed_groups,
-                })
-            })
-            .collect::<Vec<_>>();
-        remote_collapsed_groups.sort_by(|left, right| left.profile_id.cmp(&right.profile_id));
         let preferences = preferences::ClientChromePreferences {
             sidebar_width: self.sidebar_width_manual.then_some(self.sidebar_width),
             sidebar_section_split: self
@@ -60,7 +44,6 @@ impl ClientShellState {
                 .agent_panel_sort_manual
                 .then_some(self.config.agent_panel_sort),
             collapsed_groups,
-            remote_collapsed_groups,
         };
         if let Err(error) = preferences::store(path, preferences) {
             self.set_endpoint_error(error);
@@ -209,7 +192,6 @@ impl ClientShellConfig {
             ClientShellKeybindingSource::Endpoint => crate::config::keybindings_from_profile_toml(
                 profile.ok_or("endpoint did not publish its keybindings")?,
             )?,
-            ClientShellKeybindingSource::RemoteLocal => return Ok(()),
             ClientShellKeybindingSource::Local => {
                 let mut config = crate::config::Config {
                     keys: self.local_keys.clone(),
@@ -294,11 +276,8 @@ impl ClientShellConfig {
             && self.keybinding_source != ClientShellKeybindingSource::Endpoint
         {
             match config.live_keybinds_with_diagnostics() {
-                Ok((mut keybinds, keybind_diagnostics)) => {
+                Ok((keybinds, keybind_diagnostics)) => {
                     self.local_keys = config.keys.clone();
-                    if self.keybinding_source == ClientShellKeybindingSource::RemoteLocal {
-                        keybinds.keybinds.custom_commands.clear();
-                    }
                     self.keybinds = keybinds;
                     diagnostics.extend(keybind_diagnostics);
                 }

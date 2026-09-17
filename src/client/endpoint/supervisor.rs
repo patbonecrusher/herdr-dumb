@@ -44,7 +44,6 @@ pub(crate) enum EndpointSupervisorEvent {
 #[derive(Clone)]
 enum ConnectTarget {
     Local(PathBuf),
-    Ssh(super::SavedSshEndpoint),
 }
 
 struct ReconnectState {
@@ -76,19 +75,9 @@ pub(crate) struct EndpointSupervisors {
 }
 
 impl EndpointSupervisors {
-    pub(crate) fn new(profiles: &[super::SavedSshEndpoint], now: Instant) -> Self {
-        let endpoints = profiles
-            .iter()
-            .filter(|profile| profile.enabled)
-            .map(|profile| {
-                (
-                    ClientEndpointId::Ssh(profile.id.clone()),
-                    ReconnectState::new(ConnectTarget::Ssh(profile.clone()), now),
-                )
-            })
-            .collect();
+    pub(crate) fn new() -> Self {
         Self {
-            endpoints,
+            endpoints: HashMap::new(),
             next_generation: 2,
             shutdown: Arc::new(AtomicBool::new(false)),
         }
@@ -101,37 +90,6 @@ impl EndpointSupervisors {
             state.next_attempt = None;
         }
         self.endpoints.insert(ClientEndpointId::Local, state);
-    }
-
-    pub(crate) fn reconcile_profiles(
-        &mut self,
-        profiles: &[super::SavedSshEndpoint],
-        now: Instant,
-    ) -> Vec<ClientEndpointId> {
-        let mut retired = Vec::new();
-        self.endpoints.retain(|endpoint_id, state| {
-            let ConnectTarget::Ssh(previous) = &state.target else {
-                return true;
-            };
-            let keep = profiles.iter().any(|profile| {
-                profile.id == previous.id
-                    && profile.enabled
-                    && profile.target == previous.target
-                    && profile.session == previous.session
-            });
-            if !keep {
-                retired.push(endpoint_id.clone());
-            }
-            keep
-        });
-        for profile in profiles.iter().filter(|profile| profile.enabled) {
-            let state = self
-                .endpoints
-                .entry(ClientEndpointId::Ssh(profile.id.clone()))
-                .or_insert_with(|| ReconnectState::new(ConnectTarget::Ssh(profile.clone()), now));
-            state.target = ConnectTarget::Ssh(profile.clone());
-        }
-        retired
     }
 
     pub(crate) fn spawn_due(
@@ -210,7 +168,11 @@ impl EndpointSupervisors {
                 state.online_since.get_or_insert(now);
                 state.next_attempt = None;
             }
-            ClientEndpointStatus::Attention | ClientEndpointStatus::Disabled => {
+            #[cfg(test)]
+            ClientEndpointStatus::Disabled => {
+                state.next_attempt = None;
+            }
+            ClientEndpointStatus::Attention => {
                 state.online_since = None;
                 state.next_attempt = None;
             }
@@ -277,14 +239,6 @@ fn connect_once(
             })?;
             (stream, Box::new(()))
         }
-        ConnectTarget::Ssh(profile) => {
-            let connected = crate::remote::connect_saved_ssh(profile.id.as_str(), &profile.target, &profile.session).map_err(|error| {
-                if failure_needs_attention(&error) {
-                    std::io::Error::new(error.kind(), format!("{error}. Run `{}` interactively to approve setup, then restart this client", crate::remote::saved_ssh_bootstrap_command(&profile.target, &profile.session)))
-                } else { error }
-            })?;
-            (connected.stream, Box::new(connected.bridge))
-        }
     };
     let handshake = super::super::do_handshake(
         &mut stream,
@@ -314,7 +268,7 @@ fn connect_once(
     {
         return Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "this machine needs a server update before it can participate in multi-machine viewing",
+            "the local server needs an update before the client can restore its surface",
         ));
     }
     let reader = stream.try_clone()?;
@@ -329,7 +283,12 @@ fn connect_once(
 }
 
 fn failure_needs_attention(error: &std::io::Error) -> bool {
-    crate::remote::saved_ssh_failure_needs_attention(error)
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::Unsupported
+            | std::io::ErrorKind::InvalidData
+            | std::io::ErrorKind::PermissionDenied
+    )
 }
 
 fn handshake_error(error: crate::client::ClientError) -> std::io::Error {
@@ -364,115 +323,6 @@ fn retry_delay(attempt: u32) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::endpoint::ProfileId;
-
-    fn profile() -> super::super::SavedSshEndpoint {
-        super::super::SavedSshEndpoint {
-            id: ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
-            label: "Build".into(),
-            target: "build".into(),
-            session: "agents".into(),
-            enabled: true,
-        }
-    }
-
-    #[test]
-    fn live_catalog_preserves_renamed_connections_and_local_recovery() {
-        let now = Instant::now();
-        let mut profile = profile();
-        let id = ClientEndpointId::Ssh(profile.id.clone());
-        let mut supervisors = EndpointSupervisors::new(&[profile.clone()], now);
-        supervisors.add_local(PathBuf::from("local"), Some(1), now);
-        let state = supervisors.endpoints.get_mut(&id).unwrap();
-        state.generation = Some(7);
-        state.attempts = 3;
-        state.next_attempt = Some(now + Duration::from_secs(4));
-        profile.label = "Renamed".into();
-        assert!(supervisors.reconcile_profiles(&[profile], now).is_empty());
-        let state = &supervisors.endpoints[&id];
-        assert_eq!(state.generation, Some(7));
-        assert_eq!(state.attempts, 3);
-        assert_eq!(state.next_attempt, Some(now + Duration::from_secs(4)));
-        assert_eq!(
-            supervisors.endpoints[&ClientEndpointId::Local].generation,
-            Some(1)
-        );
-    }
-
-    #[test]
-    fn live_catalog_add_disable_enable_and_remove_fence_late_connections() {
-        let now = Instant::now();
-        let mut profile = profile();
-        let id = ClientEndpointId::Ssh(profile.id.clone());
-        let mut supervisors = EndpointSupervisors::new(&[], now);
-        assert!(supervisors
-            .reconcile_profiles(&[profile.clone()], now)
-            .is_empty());
-        assert_eq!(supervisors.endpoints[&id].next_attempt, Some(now));
-        supervisors.endpoints.get_mut(&id).unwrap().generation = Some(7);
-        supervisors.next_generation = 8;
-        profile.enabled = false;
-        assert_eq!(
-            supervisors.reconcile_profiles(&[profile.clone()], now),
-            vec![id.clone()]
-        );
-        assert!(!supervisors.record_status(&id, 7, ClientEndpointStatus::Online, now));
-        profile.enabled = true;
-        assert!(supervisors
-            .reconcile_profiles(&[profile.clone()], now)
-            .is_empty());
-        assert!(!supervisors.record_status(&id, 7, ClientEndpointStatus::Online, now));
-        assert_eq!(supervisors.next_generation, 8);
-        assert_eq!(supervisors.reconcile_profiles(&[], now), vec![id.clone()]);
-        assert!(!supervisors.record_status(&id, 7, ClientEndpointStatus::Online, now));
-    }
-
-    #[test]
-    fn live_catalog_destination_change_retires_only_that_machine() {
-        let now = Instant::now();
-        let mut changed = profile();
-        let other = super::super::SavedSshEndpoint::new("Other", "other", "main").unwrap();
-        let id = ClientEndpointId::Ssh(changed.id.clone());
-        let other_id = ClientEndpointId::Ssh(other.id.clone());
-        let mut supervisors = EndpointSupervisors::new(&[changed.clone(), other.clone()], now);
-        supervisors.endpoints.get_mut(&id).unwrap().generation = Some(2);
-        supervisors.endpoints.get_mut(&other_id).unwrap().generation = Some(3);
-        changed.session = "another-session".into();
-        assert_eq!(
-            supervisors.reconcile_profiles(&[changed, other], now),
-            vec![id.clone()]
-        );
-        assert_eq!(supervisors.endpoints[&id].generation, None);
-        assert_eq!(supervisors.endpoints[&other_id].generation, Some(3));
-    }
-
-    #[test]
-    fn brief_ssh_reconnections_do_not_reset_backoff() {
-        let now = Instant::now();
-        let profile = profile();
-        let id = ClientEndpointId::Ssh(profile.id.clone());
-        let mut supervisors = EndpointSupervisors::new(&[profile], now);
-        supervisors.endpoints.get_mut(&id).unwrap().generation = Some(2);
-        for attempt in 1..=5 {
-            let connected = now + Duration::from_secs(attempt * 20);
-            assert!(supervisors.record_status(&id, 2, ClientEndpointStatus::Online, connected));
-            let failed = connected + Duration::from_secs(15);
-            assert!(supervisors.disconnected(&id, 2, failed));
-            assert_eq!(
-                supervisors.endpoints[&id].next_attempt,
-                Some(failed + INITIAL_RETRY_DELAY * (1 << (attempt - 1)))
-            );
-        }
-        let connected = now + Duration::from_secs(200);
-        assert!(supervisors.record_status(&id, 2, ClientEndpointStatus::Online, connected));
-        let failed = connected + Duration::from_secs(60);
-        assert!(supervisors.disconnected(&id, 2, failed));
-        assert_eq!(
-            supervisors.endpoints[&id].next_attempt,
-            Some(failed + INITIAL_RETRY_DELAY)
-        );
-    }
-
     #[test]
     fn retry_backoff_is_bounded() {
         assert_eq!(retry_delay(1), INITIAL_RETRY_DELAY);
@@ -496,7 +346,7 @@ mod tests {
     #[test]
     fn healthy_local_only_retries_after_its_connection_fails() {
         let now = Instant::now();
-        let mut supervisors = EndpointSupervisors::new(&[profile()], now);
+        let mut supervisors = EndpointSupervisors::new();
         supervisors.add_local(PathBuf::from("local.sock"), Some(1), now);
         assert!(supervisors.endpoints[&ClientEndpointId::Local]
             .next_attempt
@@ -510,17 +360,14 @@ mod tests {
             supervisors.endpoints[&ClientEndpointId::Local].next_attempt,
             Some(now + INITIAL_RETRY_DELAY)
         );
-        assert_eq!(
-            supervisors.endpoints[&ClientEndpointId::Ssh(profile().id)].next_attempt,
-            Some(now)
-        );
     }
 
     #[test]
-    fn ssh_recovery_rejects_stale_generations_and_stops_retries_for_attention() {
+    fn local_recovery_rejects_stale_generations_and_stops_retries_for_attention() {
         let now = Instant::now();
-        let mut supervisors = EndpointSupervisors::new(&[profile()], now);
-        let endpoint_id = ClientEndpointId::Ssh(profile().id);
+        let mut supervisors = EndpointSupervisors::new();
+        let endpoint_id = ClientEndpointId::Local;
+        supervisors.add_local(PathBuf::from("local.sock"), Some(4), now);
         supervisors
             .endpoints
             .get_mut(&endpoint_id)

@@ -3,16 +3,14 @@ use super::*;
 #[path = "workspace_navigation.rs"]
 mod workspace_navigation;
 use crate::client::endpoint::{
-    ClientEndpointId, ClientEndpointStatus, ProfileId, SavedSshEndpoint,
+    ClientEndpointId, ClientEndpointStatus, TestEndpoint, TestEndpointId,
 };
 use crossterm::event::{KeyModifiers, MouseButton, MouseEventKind};
 
-fn remote_profile() -> SavedSshEndpoint {
-    SavedSshEndpoint {
-        id: ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+fn test_profile() -> TestEndpoint {
+    TestEndpoint {
+        id: TestEndpointId::parse("0123456789abcdef0123456789abcdef").unwrap(),
         label: "Build".into(),
-        target: "dev@build.example".into(),
-        session: "agents".into(),
         enabled: true,
     }
 }
@@ -60,9 +58,9 @@ fn current_workspace_view() -> crate::api::schema::AgentViewSetParams {
 
 fn state_with_remote() -> (ClientShellState, ClientEndpointId) {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    let profile = remote_profile();
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let profile = test_profile();
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
     state.set_snapshot(Box::new(snapshot()));
     state.set_pane_surface(surface());
@@ -249,21 +247,21 @@ fn switching_machines_from_copy_mode_restores_terminal_input() {
 #[test]
 fn live_catalog_rename_preserves_snapshot_and_disable_reenable_clears_it() {
     let (mut state, remote) = state_with_remote();
-    let mut profile = remote_profile();
+    let mut profile = test_profile();
     profile.label = "Renamed".into();
-    state.set_endpoint_catalog(&[profile.clone()]);
+    state.set_test_endpoints(&[profile.clone()]);
     assert_eq!(state.endpoint_label(&remote), "Renamed");
     assert!(state.endpoint_is_online(&remote));
     assert_eq!(state.endpoint_boot_id(&remote), Some("remote-boot"));
     profile.enabled = false;
-    state.set_endpoint_catalog(&[profile.clone()]);
+    state.set_test_endpoints(&[profile.clone()]);
     assert_eq!(
         state.endpoint_status(&remote),
         Some(ClientEndpointStatus::Disabled)
     );
     assert!(!state.endpoint_has_snapshot(&remote));
     profile.enabled = true;
-    state.set_endpoint_catalog(&[profile]);
+    state.set_test_endpoints(&[profile]);
     assert_eq!(
         state.endpoint_status(&remote),
         Some(ClientEndpointStatus::Connecting)
@@ -280,7 +278,7 @@ fn live_catalog_active_removal_does_not_retain_remote_projection_or_input() {
     state.overlay = Some(ClientShellOverlay::Onboarding);
     state.select_unavailable_local();
     state.retire_endpoint(&remote);
-    state.set_endpoint_catalog(&[]);
+    state.set_test_endpoints(&[]);
     assert!(state.endpoint_is_active(&ClientEndpointId::Local));
     assert!(state.snapshot.is_none());
     assert!(state.pane_surface.is_none());
@@ -302,9 +300,9 @@ fn live_catalog_active_removal_does_not_retain_remote_projection_or_input() {
 fn machine_navigation_does_not_require_a_local_snapshot_or_surface() {
     for (cols, rows) in [(100, 28), (36, 18)] {
         let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-        let profile = remote_profile();
-        let remote = ClientEndpointId::Ssh(profile.id.clone());
-        state.set_endpoint_catalog(&[profile]);
+        let profile = test_profile();
+        let remote = ClientEndpointId::Test(profile.id.clone());
+        state.set_test_endpoints(&[profile]);
         state.set_endpoint_status(&ClientEndpointId::Local, ClientEndpointStatus::Reconnecting);
         state.set_endpoint_status(&remote, ClientEndpointStatus::Online);
         state.set_endpoint_snapshot(&remote, Box::new(snapshot()));
@@ -357,7 +355,7 @@ fn machine_navigation_does_not_require_a_local_snapshot_or_surface() {
 }
 
 #[test]
-fn sidebar_renders_local_and_saved_ssh_endpoints_with_status() {
+fn sidebar_renders_test_endpoints_with_status() {
     let (mut state, _) = state_with_remote();
     let frame = state.compose(100, 28).expect("combined endpoint frame");
     let text = frame
@@ -835,9 +833,9 @@ fn aggregate_agents_use_configured_rows_machine_token_and_status_colors() {
         AgentSidebarToken::Agent,
     ]];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
-    let profile = remote_profile();
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let profile = test_profile();
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
 
     let mut local = snapshot();
@@ -895,9 +893,9 @@ fn current_workspace_agent_view_excludes_same_workspace_id_on_other_machine() {
     config.ui.sidebar.agents.rows =
         vec![vec![AgentSidebarToken::Machine, AgentSidebarToken::Agent]];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
-    let profile = remote_profile();
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let profile = test_profile();
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
 
     let mut local = snapshot();
@@ -961,9 +959,9 @@ fn current_workspace_or_blocked_keeps_foreign_attention_only() {
     config.ui.sidebar.agents.rows =
         vec![vec![AgentSidebarToken::Machine, AgentSidebarToken::Agent]];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
-    let profile = remote_profile();
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let profile = test_profile();
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
 
     let mut local = snapshot();
@@ -1031,9 +1029,9 @@ fn selected_default_view_ignores_inactive_endpoint_projection() {
     config.ui.sidebar.agents.rows =
         vec![vec![AgentSidebarToken::Machine, AgentSidebarToken::Agent]];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
-    let profile = remote_profile();
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let profile = test_profile();
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
 
     let mut local = snapshot();
@@ -1128,9 +1126,9 @@ fn legacy_custom_views_keep_v1_per_endpoint_projection() {
     config.ui.sidebar.agents.rows =
         vec![vec![AgentSidebarToken::Machine, AgentSidebarToken::Agent]];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
-    let profile = remote_profile();
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let profile = test_profile();
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
 
     let mut local = snapshot();
@@ -1174,9 +1172,9 @@ fn selected_custom_sort_orders_rendering_and_indexed_navigation() {
     config.ui.sidebar.agents.rows =
         vec![vec![AgentSidebarToken::Machine, AgentSidebarToken::Agent]];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
-    let profile = remote_profile();
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let profile = test_profile();
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
 
     let mut local = snapshot();
@@ -1305,9 +1303,9 @@ fn aggregate_priority_uses_client_observed_recency_across_machines() {
     config.ui.sidebar.agents.rows =
         vec![vec![AgentSidebarToken::Machine, AgentSidebarToken::Agent]];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
-    let profile = remote_profile();
-    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
-    state.set_endpoint_catalog(&[profile]);
+    let profile = test_profile();
+    let endpoint_id = ClientEndpointId::Test(profile.id.clone());
+    state.set_test_endpoints(&[profile]);
     state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
 
     let mut local = snapshot();
@@ -1501,10 +1499,10 @@ fn machine_arrow_toggles_inactive_machine_without_switching() {
             ClientEndpointStatus::Reconnecting,
         ] {
             let (mut state, remote_id) = state_with_remote();
-            let mut other_profile = remote_profile();
-            other_profile.id = ProfileId::parse("1123456789abcdef0123456789abcdef").unwrap();
-            let other_id = ClientEndpointId::Ssh(other_profile.id.clone());
-            state.set_endpoint_catalog(&[remote_profile(), other_profile]);
+            let mut other_profile = test_profile();
+            other_profile.id = TestEndpointId::parse("1123456789abcdef0123456789abcdef").unwrap();
+            let other_id = ClientEndpointId::Test(other_profile.id.clone());
+            state.set_test_endpoints(&[test_profile(), other_profile]);
             state.set_endpoint_status(&other_id, ClientEndpointStatus::Online);
             state.set_endpoint_snapshot(&other_id, Box::new(snapshot()));
             state.set_endpoint_status(&remote_id, status);
@@ -1831,7 +1829,7 @@ fn graphics_scope_qualifies_colliding_boot_ids_by_endpoint() {
     assert!(state.activate_endpoint_projection(&endpoint_id));
     let remote_scope = state.graphics_scope();
     assert_ne!(local_scope, remote_scope);
-    assert!(remote_scope.starts_with("ssh:0123456789abcdef0123456789abcdef:"));
+    assert!(remote_scope.starts_with("test:0123456789abcdef0123456789abcdef:"));
 }
 
 #[cfg(unix)]

@@ -54,7 +54,7 @@ Integrations marked `session` in the table above are intentionally not lifecycle
 
 On Linux and macOS, a host-visible wrapper can hide the real agent process from Herdr. Set `HERDR_AGENT=<agent>` on the wrapper command to tell Herdr which existing agent screen manifest to use. For example, run `HERDR_AGENT=claude fence -- claude` on Linux or `HERDR_AGENT=claude nono run --profile claude-code -- claude` on macOS. The hint applies only to that foreground process. Herdr cannot see it if you set it only inside a VM or container. Avoid exporting it globally unless every inherited foreground process should be treated as that agent.
 
-Some restricted Linux runtimes do not expose a terminal foreground process group. Start the Herdr server with `HERDR_PROCESS_DETECTION=child-groups` to opt into direct child-process-group inference when native detection is unavailable. Native detection remains preferred, and the default `native` mode never performs this inference. The opt-in mode is best effort: a newer background job can be mistaken for the foreground job. The variable is read by the server and requires a restart; set it in the remote server environment rather than on an attaching client.
+Some restricted Linux runtimes do not expose a terminal foreground process group. Start the Herdr server with `HERDR_PROCESS_DETECTION=child-groups` to opt into direct child-process-group inference when native detection is unavailable. Native detection remains preferred, and the default `native` mode never performs this inference. The opt-in mode is best effort: a newer background job can be mistaken for the foreground job. The variable is read by the server and requires a restart; set it in the server environment rather than on an attaching client.
 
 ## Blocked state
 
@@ -64,25 +64,25 @@ This means unusual new agent prompts may initially show as `idle` instead of `bl
 
 ## Detection manifests
 
-Bundled manifests live inside Herdr. Herdr also checks herdr.dev for remote manifest updates and applies valid per-agent rule updates automatically without requiring a Herdr restart. Remote manifests are stored in Herdr's state directory. Set `[update] manifest_check = false` to disable background remote manifest checks.
+There is no updater, release-channel switch, or detection-manifest downloader. To change versions, build and replace the executable manually. Bundled detection rules and local overrides remain available.
 
 Local overrides can replace a remote or bundled manifest from the platform config directory:
 
 ```text
-~/.config/herdr/agent-detection/<agent>.toml
+~/.config/herdr-dumb/agent-detection/<agent>.toml
 ```
 
-Local overrides always win. Without a local override, Herdr uses the newer compatible manifest between the cached remote manifest and the bundled manifest in the running binary. On debug builds, the same config helper may use a development directory such as `herdr-dev`. Invalid override files are ignored with a warning and Herdr falls back to the cached remote or bundled manifest for that agent.
+Local overrides always win. Without a local override, Herdr uses the newer compatible manifest between the cached remote manifest and the bundled manifest in the running binary. On debug builds, the same config helper may use a development directory such as `herdr-dumb-dev`. Invalid override files are ignored with a warning and Herdr falls back to the cached remote or bundled manifest for that agent.
 
 Remote manifests patch detection rules for agents Herdr already knows how to identify. Adding a completely new agent still requires a Herdr binary update for process detection, labels, and integration behavior.
 
-The running server loads active manifests into memory on startup. Automatic remote manifest updates reload that in-memory cache after new rules are written. Run `herdr server update-agent-manifests` to fetch remote manifest updates immediately and reload the running server. After editing a local override manually, restart Herdr or run `herdr server reload-agent-manifests` to apply the file to the running server.
+There is no updater, release-channel switch, or detection-manifest downloader. To change versions, build and replace the executable manually. Bundled detection rules and local overrides remain available.
 
-Use `herdr agent explain` when a pane shows the wrong state:
+Use `herdr-dumb agent explain` when a pane shows the wrong state:
 
 ```bash
-herdr agent explain <target>
-herdr agent explain --file screen.txt --agent codex --json
+herdr-dumb agent explain <target>
+herdr-dumb agent explain --file screen.txt --agent codex --json
 ```
 
 Live explain is evaluated by the running server, so it reflects the active manifest cache. The explain output shows the agent, final state, whether screen detection was skipped by a full lifecycle authority, manifest source and version, cached remote version, local override shadowing, remote update status, matched rule, visible evidence flags, matcher and region evidence for evaluated rules, skipped-update reason for transcript viewers, and the idle fallback reason when no rule matched.
@@ -102,8 +102,8 @@ This is the main Herdr workflow: start several agents, let them work in parallel
 Install the integration for each agent you use to give Herdr hook or plugin reports instead of screen detection alone:
 
 ```bash
-herdr integration install claude
-herdr integration status
+herdr-dumb integration install claude
+herdr-dumb integration status
 ```
 
 Each supported agent has its own integration name and behavior. See [Integrations](/docs/integrations/) for the per-agent details and the full install list. If you are building an agent, the [custom integration guide](/docs/integrations/#integrate-your-own-agent) shows how to report lifecycle state without adding native support to Herdr.
@@ -113,8 +113,8 @@ Each supported agent has its own integration name and behavior. See [Integration
 You can rename an agent target for display:
 
 ```bash
-herdr agent rename w1:p1 reviewer
-herdr agent rename reviewer --clear
+herdr-dumb agent rename w1:p1 reviewer
+herdr-dumb agent rename reviewer --clear
 ```
 
 Targets accept a unique live agent name or the pane ID that currently hosts the agent. Terminal IDs and bare agent-kind labels are not accepted.
@@ -124,12 +124,12 @@ Targets accept a unique live agent name or the pane ID that currently hosts the 
 Integrations report lifecycle state as semantic state only. Add display customization separately with pane metadata tokens.
 
 ```bash
-herdr pane report-agent w1:p1 \
+herdr-dumb pane report-agent w1:p1 \
   --source custom:indexer \
   --agent docs-bot \
   --state working
 
-herdr pane report-metadata w1:p1 \
+herdr-dumb pane report-metadata w1:p1 \
   --source custom:indexer-display \
   --token summary=indexing
 ```
@@ -143,7 +143,7 @@ Agent sidebar rows can also opt into `terminal_title` or `terminal_title_strippe
 Attach your current terminal to one agent terminal instead of the full Herdr UI:
 
 ```bash
-herdr agent attach reviewer
+herdr-dumb agent attach reviewer
 ```
 
 Detach with `ctrl+b q`. Send a literal `ctrl+b` with `ctrl+b ctrl+b`.
@@ -153,7 +153,7 @@ Scroll with the mouse wheel or plain page up/page down. Normal input jumps back 
 Use `--takeover` if another direct attach client already owns input:
 
 ```bash
-herdr agent attach reviewer --takeover
+herdr-dumb agent attach reviewer --takeover
 ```
 
-Use `herdr terminal attach <terminal_id>` when you want the same direct attach behavior for a non-agent terminal.
+Use `herdr-dumb terminal attach <terminal_id>` when you want the same direct attach behavior for a non-agent terminal.

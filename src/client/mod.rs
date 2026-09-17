@@ -13,9 +13,7 @@
 //! - Displays sound/toast notifications forwarded from server
 
 mod attach;
-mod catalog_reload;
 mod clipboard_forwarding;
-mod clipboard_images;
 mod config_reload;
 #[cfg(unix)]
 mod direct_graphics;
@@ -93,13 +91,6 @@ use attach::direct_attach_pixel_mouse;
 use attach::AttachEscapeState;
 #[cfg(unix)]
 use attach::{write_attach_semantic_action, AttachInputAction};
-use clipboard_images::{
-    client_remote_image_paste_key, endpoint_accepts_local_images, write_remote_image_to_server,
-};
-#[cfg(windows)]
-use clipboard_images::{read_image_file_from_client_events, should_bridge_clipboard_image_events};
-#[cfg(unix)]
-use clipboard_images::{read_image_file_from_terminal_drop, should_bridge_clipboard_image_paste};
 pub use errors::ClientError;
 #[cfg(test)]
 use frame_output::{clear_received_kitty_graphics, kitty_graphics_image_ids};
@@ -107,12 +98,9 @@ use frame_output::{
     contains_kitty_graphics_bytes, record_received_kitty_graphics,
     write_encoded_frame_with_graphics,
 };
-pub(crate) use handshake::probe_endpoint_negotiation;
-use handshake::{client_shell_keybinding_source, do_handshake, is_remote_client_process};
 #[cfg(test)]
-use handshake::{
-    direct_graphics_profile_values, handshake_read_timeout, REMOTE_HANDSHAKE_READ_TIMEOUT,
-};
+use handshake::direct_graphics_profile_values;
+use handshake::{client_shell_keybinding_source, do_handshake};
 use notifications::{handle_notify, handle_shell_notification_effects};
 #[cfg(test)]
 use notifications::{handle_notify_with_notifiers, sound_from_notify_message};
@@ -172,7 +160,6 @@ fn run_client_with_mode(
     let mouse_scroll_lines = loaded_config.config.ui.mouse_scroll_lines();
     let redraw_on_focus_gained = loaded_config.config.ui.redraw_on_focus_gained;
     let host_cursor = loaded_config.config.ui.host_cursor;
-    let remote_image_paste_key = client_remote_image_paste_key(&loaded_config.config);
     let kitty_graphics_enabled =
         loaded_config.config.kitty_graphics_enabled() && client_rendered_shell;
     let pixel_geometry_enabled = kitty_graphics_enabled || attach_escape.is_some();
@@ -189,29 +176,14 @@ fn run_client_with_mode(
         pixel_geometry_fallback: kitty_graphics_enabled,
         mouse_capture_active: mouse_capture,
         endpoint_keybindings,
-        remote_image_paste_key,
         shell_config,
     };
 
     crate::logging::startup("client");
     info!(path = %socket_path.display(), "{log_message}");
 
-    let endpoint_catalog = if client_rendered_shell && !is_remote_client_process() {
-        endpoint::EndpointCatalog::load().unwrap_or_else(|error| {
-            warn!(%error, "saved SSH endpoint catalog is unavailable");
-            endpoint::EndpointCatalog::default()
-        })
-    } else {
-        endpoint::EndpointCatalog::default()
-    };
-    let federated = endpoint_catalog.has_enabled_ssh();
-
     let initial_stream = match crate::ipc::connect_local_stream(&socket_path) {
         Ok(stream) => Some(stream),
-        Err(error) if federated => {
-            warn!(%error, "Local is unavailable; keeping saved machines available");
-            None
-        }
         Err(error) => {
             return Err(io::Error::other(
                 ClientError::ConnectionFailed(error).to_string(),
@@ -243,18 +215,6 @@ fn run_client_with_mode(
                 true,
             )
             .map_err(|error| io::Error::other(error.to_string()))?;
-            if federated
-                && !endpoint::EndpointNegotiation::new(
-                    handshake.endpoint_methods.clone().unwrap_or_default(),
-                    handshake.endpoint_capabilities.clone().unwrap_or_default(),
-                )
-                .supports_surface_interest()
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "Local needs a server update before it can participate in multi-machine viewing",
-                ));
-            }
             if let Some((terminal_id, takeover)) = attach_request {
                 write_to_server(
                     &mut stream,
@@ -264,19 +224,11 @@ fn run_client_with_mode(
                     },
                 )?;
             }
-            Ok((stream, handshake))
+            Ok::<_, io::Error>((stream, handshake))
         })
         .transpose();
-    let initial = match initial {
-        Ok(initial) => initial,
-        Err(error) if federated => {
-            warn!(%error, "Local handshake failed; keeping saved machines available");
-            None
-        }
-        Err(error) => return Err(error),
-    };
+    let initial = initial?;
 
-    // The federated shell can show connection notices without any server snapshot.
     let direct_attach = attach_escape.is_some();
     let terminal_guard = if direct_attach {
         setup_direct_attach_terminal(mouse_capture)
@@ -316,7 +268,6 @@ fn run_client_with_mode(
     let result = rt.block_on(async {
         run_client_loop(
             initial,
-            endpoint_catalog,
             cols,
             rows,
             cell_width_px,
@@ -367,7 +318,6 @@ fn run_client_with_mode(
 /// - main loop: coordinates input, output, and server communication
 async fn run_client_loop(
     initial: Option<(LocalStream, handshake::HandshakeResult)>,
-    mut endpoint_catalog: endpoint::EndpointCatalog,
     cols: u16,
     rows: u16,
     initial_cell_width_px: u32,
@@ -381,7 +331,6 @@ async fn run_client_loop(
     #[cfg(windows)]
     let _ = config.mouse_scroll_lines;
     let draw_host_cursor = attach_escape.is_none() && should_draw_host_cursor(config.host_cursor);
-    let is_remote_client = is_remote_client_process();
     let local_unavailable = initial.is_none();
 
     let mut state = ClientState {
@@ -410,7 +359,6 @@ async fn run_client_loop(
         attach_escape,
         #[cfg(unix)]
         mouse_scroll_lines: config.mouse_scroll_lines,
-        remote_image_paste_key: config.remote_image_paste_key,
         redraw_on_focus_gained: config.redraw_on_focus_gained,
         repaint_pending: false,
         presentation_frozen: false,
@@ -419,10 +367,8 @@ async fn run_client_loop(
         detached_process_children: Vec::new(),
         shell: config.shell_config.map(shell::ClientShellState::new),
     };
-    let mut federated = endpoint_catalog.has_enabled_ssh();
     if let Some(shell) = state.shell.as_mut() {
         shell.set_graphics_cell_size(initial_cell_width_px, initial_cell_height_px);
-        shell.set_endpoint_catalog(&endpoint_catalog.ssh);
         shell.set_endpoint_methods_for(
             &endpoint::ClientEndpointId::Local,
             initial
@@ -561,9 +507,8 @@ async fn run_client_loop(
     } else {
         endpoint::EndpointRegistry::empty()
     };
-    let mut supervisors =
-        endpoint::EndpointSupervisors::new(&endpoint_catalog.ssh, std::time::Instant::now());
-    if federated {
+    let mut supervisors = endpoint::EndpointSupervisors::new();
+    if state.shell.is_some() {
         supervisors.add_local(
             client_socket_path(),
             write_stream
@@ -584,11 +529,6 @@ async fn run_client_loop(
     let mut next_surface_serial = 1_u64;
     let mut pending_activation: Option<endpoint::PendingEndpointActivation> = None;
     let mut scheduled_activation = None;
-    let mut pending_catalog: Option<Result<Vec<endpoint::SavedSshEndpoint>, String>> = None;
-    if state.shell.is_some() && !is_remote_client && state.attach_escape.is_none() {
-        catalog_reload::watch_profiles(event_tx.clone(), should_quit.clone());
-    }
-
     // This (foreground) client owns the prefix ASCII input-source switch
     // (implemented on macOS and Windows; a no-op on other platforms).
     let mut prefix_input_source = crate::platform::RealPrefixInputSource::default();
@@ -598,95 +538,6 @@ async fn run_client_loop(
     #[cfg(windows)]
     let mut stdin_open = true;
     while !should_quit.load(Ordering::Acquire) {
-        if pending_activation.is_none() {
-            if let Some(reload) = pending_catalog.take() {
-                match reload {
-                    Ok(profiles) => {
-                        let now = std::time::Instant::now();
-                        if !federated && profiles.iter().any(|profile| profile.enabled) {
-                            // Keep Local recovery once enabled, even after removing the last SSH profile.
-                            federated = true;
-                            supervisors.add_local(
-                                client_socket_path(),
-                                write_stream
-                                    .connection(&endpoint::ClientEndpointId::Local)
-                                    .map(|connection| connection.generation),
-                                now,
-                            );
-                            if write_stream
-                                .connection(&endpoint::ClientEndpointId::Local)
-                                .is_some_and(|connection| {
-                                    !connection.negotiation.supports_surface_interest()
-                                })
-                            {
-                                if let Some(shell) = state.shell.as_mut() {
-                                    shell.receive_endpoint_unavailable(
-                                        "Update the Local server before switching between machines"
-                                            .into(),
-                                    );
-                                }
-                            }
-                        }
-                        let active_removed = catalog_reload::apply_profiles(
-                            &mut state,
-                            &mut write_stream,
-                            &mut endpoint_commands,
-                            &mut supervisors,
-                            &mut endpoint_catalog,
-                            profiles,
-                            now,
-                        );
-                        if active_removed {
-                            clear_endpoint_host_effects(
-                                &mut state,
-                                &host_mouse_capture_active,
-                                &host_sgr_pixels_active,
-                            );
-                            scheduled_activation = None;
-                            if state.shell.as_ref().is_some_and(|shell| {
-                                shell.endpoint_projection_available(
-                                    &endpoint::ClientEndpointId::Local,
-                                )
-                            }) && write_stream
-                                .connection(&endpoint::ClientEndpointId::Local)
-                                .is_some()
-                            {
-                                scheduled_activation = Some(ClientLoopEvent::ActivateEndpoint {
-                                    endpoint_id: endpoint::ClientEndpointId::Local,
-                                    target: None,
-                                    force: true,
-                                });
-                            } else {
-                                present_handoff_unavailable(
-                                    &mut state,
-                                    "Local is unavailable; reconnecting".into(),
-                                );
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        warn!(%error, "saved machines could not be reloaded; keeping current connections");
-                        if let Some(shell) = state.shell.as_mut() {
-                            shell.receive_endpoint_unavailable(format!(
-                                "Saved machines could not be reloaded; keeping current connections: {error}"
-                            ));
-                        }
-                    }
-                }
-                apply_client_shell_input_source_changes(&mut state, &mut prefix_input_source);
-                if let Some(shell) = state.shell.as_mut() {
-                    let cleanup = shell.take_pending_graphics_cleanup();
-                    let frame = shell.compose(state.reported_size.0, state.reported_size.1);
-                    let frozen = state.presentation_frozen;
-                    state.presentation_frozen = false;
-                    state.present_graphics(&cleanup);
-                    if let Some(frame) = frame {
-                        state.present_frame(frame);
-                    }
-                    state.presentation_frozen = frozen;
-                }
-            }
-        }
         if let Some(shell) = state.shell.as_ref() {
             supervisors.spawn_due(
                 std::time::Instant::now(),
@@ -745,55 +596,14 @@ async fn run_client_loop(
         }
 
         match event {
-            ClientLoopEvent::EndpointCatalog(reload) => pending_catalog = Some(reload),
             #[cfg(unix)]
             ClientLoopEvent::StdinInput(data) => {
-                let image_bridge_active = endpoint_accepts_local_images(
-                    is_remote_client,
-                    write_stream.active_id(),
-                    write_stream.active_surface_available(),
-                );
                 if state.shell.is_some() {
                     if will_query_host_cell_size {
                         let events = crate::raw_input::parse_raw_input_bytes_sync(&data);
                         if let Some((width_px, height_px)) = reported_cell_size_from_events(&events)
                         {
                             store_reported_cell_size(&reported_cell_size, width_px, height_px);
-                        }
-                    }
-                    let image_target = state
-                        .shell
-                        .as_ref()
-                        .and_then(|shell| shell.clipboard_image_target());
-                    if let Some(target) = image_target.clone() {
-                        if should_bridge_clipboard_image_paste(
-                            &data,
-                            image_bridge_active,
-                            state.remote_image_paste_key,
-                        ) {
-                            if let Some(image) = crate::platform::read_clipboard_image() {
-                                write_remote_image_to_server(
-                                    &mut write_stream,
-                                    target,
-                                    image,
-                                    "clipboard paste",
-                                )?;
-                                continue;
-                            }
-                            info!(
-                                "clipboard image paste trigger received, but local clipboard has no image"
-                            );
-                        }
-                        if let Some(image) =
-                            read_image_file_from_terminal_drop(&data, image_bridge_active)
-                        {
-                            write_remote_image_to_server(
-                                &mut write_stream,
-                                target,
-                                image,
-                                "file drop",
-                            )?;
-                            continue;
                         }
                     }
                     let events = crate::raw_input::parse_raw_input_bytes_sync(&data);
@@ -889,34 +699,6 @@ async fn run_client_loop(
                     }
                     data
                 };
-                if should_bridge_clipboard_image_paste(
-                    &data,
-                    image_bridge_active,
-                    state.remote_image_paste_key,
-                ) {
-                    if let Some(image) = crate::platform::read_clipboard_image() {
-                        write_remote_image_to_server(
-                            &mut write_stream,
-                            crate::protocol::ClientClipboardImageTarget::DirectTerminal,
-                            image,
-                            "clipboard paste",
-                        )?;
-                        continue;
-                    }
-                    info!(
-                        "clipboard image paste trigger received, but local clipboard has no image"
-                    );
-                }
-                if let Some(image) = read_image_file_from_terminal_drop(&data, image_bridge_active)
-                {
-                    write_remote_image_to_server(
-                        &mut write_stream,
-                        crate::protocol::ClientClipboardImageTarget::DirectTerminal,
-                        image,
-                        "file drop",
-                    )?;
-                    continue;
-                }
                 let msg = ClientMessage::Input { data };
                 if let Err(e) = write_to_server(&mut write_stream, &msg) {
                     return Err(ClientError::ConnectionLost(e));
@@ -1022,11 +804,6 @@ async fn run_client_loop(
             }
             #[cfg(windows)]
             ClientLoopEvent::StdinEvents(events) => {
-                let image_bridge_active = endpoint_accepts_local_images(
-                    is_remote_client,
-                    write_stream.active_id(),
-                    write_stream.active_surface_available(),
-                );
                 if state.shell.is_some() {
                     if events.iter().any(|event| {
                         matches!(event, crate::protocol::ClientInputEvent::FocusGained)
@@ -1035,41 +812,6 @@ async fn run_client_loop(
                             state.mouse_capture_active,
                             host_sgr_pixels_active.load(Ordering::Acquire),
                         );
-                    }
-                    let image_target = state
-                        .shell
-                        .as_ref()
-                        .and_then(|shell| shell.clipboard_image_target());
-                    if let Some(target) = image_target.clone() {
-                        if should_bridge_clipboard_image_events(
-                            &events,
-                            image_bridge_active,
-                            state.remote_image_paste_key,
-                        ) {
-                            if let Some(image) = crate::platform::read_clipboard_image() {
-                                write_remote_image_to_server(
-                                    &mut write_stream,
-                                    target,
-                                    image,
-                                    "clipboard paste",
-                                )?;
-                                continue;
-                            }
-                            info!(
-                                "clipboard image paste trigger received, but local clipboard has no image"
-                            );
-                        }
-                        if let Some(image) =
-                            read_image_file_from_client_events(&events, image_bridge_active)
-                        {
-                            write_remote_image_to_server(
-                                &mut write_stream,
-                                target,
-                                image,
-                                "file drop",
-                            )?;
-                            continue;
-                        }
                     }
                     let (outcome, frame) = {
                         let shell = state.shell.as_mut().expect("checked shell mode");
@@ -1248,12 +990,6 @@ async fn run_client_loop(
                 target,
                 force,
             } => {
-                if !endpoint_catalog.select_endpoint(&endpoint_id) {
-                    continue;
-                }
-                if let Err(error) = endpoint_catalog.store_selection() {
-                    warn!(%error, "failed to persist desired endpoint selection");
-                }
                 begin_endpoint_activation(
                     &mut state,
                     &mut write_stream,
@@ -1316,7 +1052,7 @@ async fn run_client_loop(
                 match *message {
                     ServerMessage::ClientShellSnapshot(_) => {
                         let message = "server sent an unnegotiated binary endpoint snapshot";
-                        if federated || !endpoint_id.is_local() {
+                        if !endpoint_id.is_local() {
                             if handle_endpoint_attention(
                                 &mut state,
                                 &mut write_stream,
@@ -1583,7 +1319,7 @@ async fn run_client_loop(
                         let _ = (transfer_id, image_id);
                     }
                     ServerMessage::ServerShutdown { reason } => {
-                        if !federated && endpoint_id.is_local() {
+                        if endpoint_id.is_local() {
                             return Err(ClientError::ServerShutdown { reason });
                         }
                         write_stream.fail(
@@ -1908,10 +1644,7 @@ async fn run_client_loop(
                                 continue;
                             }
                             Ok(endpoint::EndpointControlMessage::Snapshot(snapshot)) => snapshot,
-                            Err(message)
-                                if federated
-                                    || !endpoint::protocol_failure_is_fatal(&endpoint_id) =>
-                            {
+                            Err(message) if !endpoint::protocol_failure_is_fatal(&endpoint_id) => {
                                 if handle_endpoint_attention(
                                     &mut state,
                                     &mut write_stream,
@@ -1975,12 +1708,7 @@ async fn run_client_loop(
                                 continue;
                             }
                         }
-                        let selected_endpoint = endpoint_catalog
-                            .selected_profile
-                            .as_ref()
-                            .map_or(endpoint::ClientEndpointId::Local, |profile_id| {
-                                endpoint::ClientEndpointId::Ssh(profile_id.clone())
-                            });
+                        let selected_endpoint = endpoint::ClientEndpointId::Local;
                         let activation_ready = state.shell.as_ref().is_some_and(|shell| {
                             shell.endpoint_has_snapshot(&selected_endpoint)
                                 && (!write_stream
@@ -2041,7 +1769,7 @@ async fn run_client_loop(
                         error = %failure.message,
                         "endpoint transport failed"
                     );
-                    if !federated && failure.endpoint_id.is_local() {
+                    if failure.endpoint_id.is_local() {
                         return Err(ClientError::ConnectionLost(io::Error::new(
                             failure.kind,
                             failure.message,

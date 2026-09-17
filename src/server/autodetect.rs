@@ -33,7 +33,7 @@ pub(crate) const STARTUP_CWD_ENV_VAR: &str = "HERDR_STARTUP_CWD";
 // Server detection
 // ---------------------------------------------------------------------------
 
-/// Checks whether a herdr server is currently listening on the client socket.
+/// Checks whether a herdr-dumb server is currently listening on the client socket.
 ///
 /// This works by attempting to connect to the client socket. If the connection
 /// succeeds, a server is running. If the socket file doesn't exist or the
@@ -45,7 +45,7 @@ pub fn is_server_listening() -> bool {
     is_server_listening_at(&client_socket_path())
 }
 
-/// Checks whether a herdr server is listening at a specific socket path.
+/// Checks whether a herdr-dumb server is listening at a specific socket path.
 fn is_server_listening_at(socket_path: &Path) -> bool {
     #[cfg(windows)]
     {
@@ -142,10 +142,10 @@ fn client_protocol_accepts_hello(socket_path: &Path) -> io::Result<bool> {
     }
 }
 
-fn validate_running_server_compatibility(saved_federation: bool) -> io::Result<()> {
+fn validate_running_server_compatibility() -> io::Result<()> {
     let Some(status) = read_server_status()? else {
         return Err(io::Error::other(format!(
-            "a herdr server is listening, but its status API is unavailable.\n\n{}\nIf that fails, stop the old server process manually.",
+            "a herdr-dumb server is listening, but its status API is unavailable.\n\n{}\nIf that fails, stop the old server process manually.",
             crate::session::active_restart_after_update_guidance()
         )));
     };
@@ -153,18 +153,11 @@ fn validate_running_server_compatibility(saved_federation: bool) -> io::Result<(
     let capabilities = status.capabilities.as_ref();
     let endpoint_generation =
         capabilities.and_then(|capabilities| capabilities.endpoint_protocol_generation);
-    let surface_interest = capabilities.is_some_and(|capabilities| capabilities.surface_interest);
-    if endpoint_generation == Some(crate::protocol::endpoint::ENDPOINT_PROTOCOL_GENERATION)
-        && (!saved_federation || surface_interest)
-    {
+    if endpoint_generation == Some(crate::protocol::endpoint::ENDPOINT_PROTOCOL_GENERATION) {
         return Ok(());
     }
 
-    let requirement = if saved_federation && !surface_interest {
-        "saved SSH machines require surface lifecycle support"
-    } else {
-        "the stable endpoint generation is incompatible"
-    };
+    let requirement = "the stable endpoint generation is incompatible";
     Err(io::Error::other(format!(
         "This session needs one final server update before Herdr can attach ({requirement}).\n\nserver: v{} endpoint generation {}\nclient: v{} endpoint generation {}\n\n{}",
         status.version.as_deref().unwrap_or("unknown"),
@@ -181,7 +174,7 @@ fn validate_running_server_compatibility(saved_federation: bool) -> io::Result<(
 // Server spawning
 // ---------------------------------------------------------------------------
 
-/// Spawns the herdr server as a background daemon process.
+/// Spawns the herdr-dumb server as a background daemon process.
 ///
 /// The server process is fully detached:
 /// - Runs in its own session (setsid) so it survives the client exiting
@@ -195,7 +188,7 @@ pub fn spawn_server_daemon() -> io::Result<u32> {
     let exe = std::env::current_exe().map_err(|err| {
         io::Error::new(
             err.kind(),
-            format!("failed to determine herdr executable path: {err}"),
+            format!("failed to determine herdr-dumb executable path: {err}"),
         )
     })?;
 
@@ -205,7 +198,10 @@ pub fn spawn_server_daemon() -> io::Result<u32> {
 
     let pid =
         crate::platform::launch_server_daemon_command(&mut command).map_err(|err: io::Error| {
-            io::Error::new(err.kind(), format!("failed to spawn herdr server: {err}"))
+            io::Error::new(
+                err.kind(),
+                format!("failed to spawn herdr-dumb server: {err}"),
+            )
         })?;
     info!(pid, "server daemon spawned");
 
@@ -292,28 +288,19 @@ pub fn wait_for_server_socket(socket_path: &Path, timeout: Duration) -> io::Resu
 /// 1. Check if a server is listening on the client socket
 /// 2. If no server → spawn server daemon → wait for socket readiness
 /// 3. Run the thin client (which connects to the server)
-pub fn auto_detect_launch(saved_federation: bool) -> io::Result<()> {
+pub fn auto_detect_launch() -> io::Result<()> {
     let socket_path = client_socket_path();
     info!(path = %socket_path.display(), "auto-detect launch starting");
 
     let startup = if is_server_listening_at(&socket_path) {
         info!("server already running, attaching as client");
-        if saved_federation {
-            Ok(())
-        } else {
-            validate_running_server_compatibility(false)
-        }
+        validate_running_server_compatibility()
     } else {
         info!("no server running, spawning server daemon");
         spawn_server_daemon()
             .and_then(|_| wait_for_server_socket(&socket_path, SERVER_READY_TIMEOUT))
     };
-    if let Err(error) = startup {
-        if !saved_federation {
-            return Err(error);
-        }
-        tracing::warn!(%error, "Local startup failed; keeping saved machines available");
-    }
+    startup?;
 
     // Now attach as a thin client.
     crate::client::run_client()
@@ -538,7 +525,7 @@ test "$sid" = "$$"
         let path = dir.join("api.sock");
         std::env::set_var(crate::api::SOCKET_PATH_ENV_VAR, &path);
 
-        let err = validate_running_server_compatibility(false).unwrap_err();
+        let err = validate_running_server_compatibility().unwrap_err();
 
         assert!(
             err.to_string().contains("status API is unavailable"),
@@ -574,7 +561,7 @@ test "$sid" = "$$"
             stream.flush().unwrap();
         });
 
-        let err = validate_running_server_compatibility(false).unwrap_err();
+        let err = validate_running_server_compatibility().unwrap_err();
         let message = err.to_string();
 
         let _ = handle.join();
@@ -583,11 +570,11 @@ test "$sid" = "$$"
             "unexpected error: {message}"
         );
         assert!(
-            message.contains("Run `herdr session stop work`"),
+            message.contains("Run `herdr-dumb session stop work`"),
             "unexpected error: {message}"
         );
         assert!(
-            message.contains("then run `herdr session attach work` again"),
+            message.contains("then run `herdr-dumb session attach work` again"),
             "unexpected error: {message}"
         );
         std::env::remove_var("XDG_CONFIG_HOME");

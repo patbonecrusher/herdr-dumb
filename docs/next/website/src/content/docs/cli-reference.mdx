@@ -10,95 +10,52 @@ Most commands print JSON responses for deterministic automation in scripts.
 ## Launch and status
 
 ```bash
-herdr                         # launch or attach to the default session
-herdr --remote workbox        # attach through SSH, using local keybindings
-herdr --default-config        # print default config
-herdr update                  # download and install from the configured channel
-herdr completion zsh          # generate a zsh completion script
-herdr channel show            # print stable or preview
-herdr channel set preview     # opt into preview builds
-herdr channel set stable      # return a direct install to stable
-herdr --version               # print version
+herdr-dumb                         # launch or attach to the default session
+herdr-dumb --default-config        # print default config
+herdr-dumb completion zsh          # generate a zsh completion script
+herdr-dumb --version               # print version
 ```
 
-Optional launch and update settings:
+Optional launch settings:
 
 - Add `--session <name>` to use a named session instead of the default.
-- Add `--remote-keybindings server` to remote attach to use server keybindings instead of local ones.
-- Experimental live handoff requires explicit `--handoff` on `herdr --remote` or `herdr update`. It is not the normal setup or connection path; see [Updates](/docs/install/#update).
 
 Status commands:
 
 ```bash
-herdr status
-herdr status server
-herdr status client
+herdr-dumb status
+herdr-dumb status server
+herdr-dumb status client
 ```
 
 API schema commands:
 
 ```bash
-herdr api schema
-herdr api schema --json
-herdr api schema --output herdr-api.schema.json
+herdr-dumb api schema
+herdr-dumb api schema --json
+herdr-dumb api schema --output herdr-api.schema.json
 ```
 
-`herdr api schema` prints a short summary of the socket protocol schema bundled
+`herdr-dumb api schema` prints a short summary of the socket protocol schema bundled
 with the installed binary. Use `--json` for the full JSON Schema document, or
 `--output PATH` to write that document to a file.
-
-## Saved SSH machines
-
-```bash
-herdr machine list
-herdr machine add workbox --label "Build machine"
-herdr machine rename <profile-id> --label "New name"
-herdr machine disable <profile-id>
-herdr machine enable <profile-id>
-herdr machine remove <profile-id>
-```
-
-By default, `machine add` uses the remote default session. Add `--remote-session <name>` only for a named session. `machine list` accepts optional `--json` for scripts. See [Connecting machines](/docs/connecting-machines/) for the full setup and connection guide.
-
-`machine add` checks the remote installation's capabilities, installs or updates with approval only when needed, and starts the requested session's background server before saving. Compatible release versions do not need to match. Run setup in an interactive terminal when installation or restart approval is required; failed or cancelled setup does not save a profile. Replacing a running server requires explicit approval with a default answer of No, and stops its pane processes. `machine add` never enables experimental handoff implicitly.
-
-Changes apply automatically to open local Herdr clients, normally within a second. Added or enabled machines connect in the background; renaming does not reconnect. Removing or disabling disconnects only that machine and leaves its remote sessions running. Removing the machine you are viewing returns to Local, or shows Local as unavailable until it reconnects. Each profile stores an opaque ID, label, SSH target, explicit remote session, and enabled state in client state. Herdr does not store passwords, private keys, or other SSH credentials.
-
-Automatic connections and reconnects are non-interactive. If a host key, password, key passphrase, MFA step, install, update, or restart needs approval, the machine shows Attention instead of opening a hidden prompt. Run the standalone command printed by Herdr, such as `herdr --remote workbox`, to complete that setup in the foreground, then restart the client. Include `--session <name>` only when the profile targets a named session.
-
-Workspace, tab, pane IDs, and agent names belong to a single server. Selecting a machine in the UI does not retarget CLI commands. Use the global **prefix** `--machine <label-or-id>` to route API commands to a saved SSH machine:
-
-```bash
-herdr --machine "Build machine" agent list
-herdr --machine <profile-id> pane list
-herdr --machine "Build machine" agent prompt w1:p1 "review this change"
-herdr --machine "Build machine" worktree create --cwd /srv/project --branch review
-```
-
-The selector must match an enabled saved profile ID or a unique, case-sensitive label, not an arbitrary SSH hostname. The saved remote session is used; combining `--machine` with `--session` or `--remote` is an error. Without the prefix, commands retain their existing local session/socket behavior.
-
-Supported commands are `workspace`, `worktree`, `tab`, `pane`, `notification`, `agent` (except `attach` and local `explain --file`), `api snapshot`, `status server`, and API-backed plugin commands (`link`, `unlink`, `enable`, `disable`, `list`, `action`, `log`, `pane`). Server commands support `stop`, `reload-config`, `agent-manifests`, and `reload-agent-manifests`. Local installation/configuration commands, plugin installation, session management, and interactive terminal attachment are not forwarded.
-
-Requests and responses travel through the JSON API over non-interactive SSH; API payloads are not interpolated into the SSH shell command. No open TUI is required, and the bridge never installs, starts, or restarts a server. Update the local CLI and remote Herdr installation to support machine forwarding, and keep the running remote server's API protocol compatible. Authentication, unavailable machines, and incompatible versions fail without falling back to Local. Requests are not automatically retried after connection failure.
-
-Local pane IDs are not inherited by remote commands. Use explicit remote IDs; `--current` cannot refer to the caller's local pane. Remote worktree paths must be absolute, `~`, or start with `~/` (expanded on the server); plugin link paths must be absolute. The prefix targets one machine at a time; combined listings and routing through another TUI's connections are not included.
 
 ## Shell completions
 
 ```bash
-herdr completion zsh
-herdr completions zsh
-herdr completion bash
-herdr completion fish
-herdr completion powershell
-herdr completion elvish
+herdr-dumb completion zsh
+herdr-dumb completions zsh
+herdr-dumb completion bash
+herdr-dumb completion fish
+herdr-dumb completion powershell
+herdr-dumb completion elvish
 ```
 
 `completion` prints the script to stdout. `completions` is an alias. For a
 temporary zsh session, load the script directly:
 
 ```bash
-source <(herdr completion zsh)
+source <(herdr-dumb completion zsh)
 ```
 
 For a persistent zsh setup, write the generated `_herdr` function somewhere on
@@ -106,7 +63,7 @@ your `fpath` before `compinit` runs:
 
 ```bash
 mkdir -p ~/.zfunc
-herdr completion zsh > ~/.zfunc/_herdr
+herdr-dumb completion zsh > ~/.zfunc/_herdr
 ```
 
 Then make sure your `.zshrc` contains:
@@ -120,20 +77,19 @@ compinit
 ## Server
 
 ```bash
-herdr server
-herdr server stop
-herdr server reload-config
-herdr server agent-manifests [--json]
-herdr server update-agent-manifests [--json]
-herdr server reload-agent-manifests
+herdr-dumb server
+herdr-dumb server stop
+herdr-dumb server reload-config
+herdr-dumb server agent-manifests [--json]
+herdr-dumb server reload-agent-manifests
 ```
 
-`herdr server` runs the headless server explicitly. Use it for supervised or service-style setups. `reload-config` applies reloadable settings without restarting panes. `agent-manifests` shows the active agent detection manifest sources, cached remote versions, and last remote update results. `update-agent-manifests` fetches remote manifest updates immediately, reloads them into the running server, and prints the updated manifest status; pass `--json` for the raw status response. `reload-agent-manifests` reloads agent detection manifests into the running server after local override edits.
+`herdr-dumb server` runs the headless server explicitly. Use it for supervised or service-style setups. `reload-config` applies reloadable settings without restarting panes. `agent-manifests` shows the active agent detection manifest sources, cached remote versions, and last remote update results.  `reload-agent-manifests` reloads agent detection manifests into the running server after local override edits.
 
 ## Notifications
 
 ```bash
-herdr notification show <title> [--body TEXT] [--position top-left|top-right|bottom-left|bottom-right] [--sound none|done|request]
+herdr-dumb notification show <title> [--body TEXT] [--position top-left|top-right|bottom-left|bottom-right] [--sound none|done|request]
 ```
 
 `notification show` uses the configured `[ui.toast]` delivery. `--position` only affects in-app Herdr toasts. `--sound` defaults to `none`; `done` and `request` play the existing finished and needs-attention sounds only when the notification is shown.
@@ -141,10 +97,10 @@ herdr notification show <title> [--body TEXT] [--position top-left|top-right|bot
 ## Sessions
 
 ```bash
-herdr session list [--json]
-herdr session attach <name>
-herdr session stop <name> [--json]
-herdr session delete <name> [--json]
+herdr-dumb session list [--json]
+herdr-dumb session attach <name>
+herdr-dumb session stop <name> [--json]
+herdr-dumb session delete <name> [--json]
 ```
 
 Use `default` as the session name when you need to stop the default session explicitly.
@@ -152,19 +108,19 @@ Use `default` as the session name when you need to stop the default session expl
 ## Workspaces
 
 ```bash
-herdr workspace list
-herdr workspace create [--cwd PATH] [--label TEXT] [--env KEY=VALUE] [--focus] [--no-focus]
-herdr workspace get <workspace_id>
-herdr workspace focus <workspace_id>
-herdr workspace rename <workspace_id> <label>
-herdr workspace report-metadata <workspace_id> --source ID [--token NAME=VALUE] [--clear-token NAME] [--seq N] [--ttl-ms N]
-herdr workspace close <workspace_id> [--group]
+herdr-dumb workspace list
+herdr-dumb workspace create [--cwd PATH] [--label TEXT] [--env KEY=VALUE] [--focus] [--no-focus]
+herdr-dumb workspace get <workspace_id>
+herdr-dumb workspace focus <workspace_id>
+herdr-dumb workspace rename <workspace_id> <label>
+herdr-dumb workspace report-metadata <workspace_id> --source ID [--token NAME=VALUE] [--clear-token NAME] [--seq N] [--ttl-ms N]
+herdr-dumb workspace close <workspace_id> [--group]
 ```
 
 Create a workspace without stealing focus:
 
 ```bash
-herdr workspace create --cwd ~/project --label api --no-focus
+herdr-dumb workspace create --cwd ~/project --label api --no-focus
 ```
 
 A workspace is a top-level project or work context. Creating one also creates its first tab and root pane. The JSON response exposes their IDs as `.result.workspace.workspace_id`, `.result.tab.tab_id`, and `.result.root_pane.pane_id`.
@@ -172,10 +128,10 @@ A workspace is a top-level project or work context. Creating one also creates it
 ## Worktrees
 
 ```bash
-herdr worktree list [--workspace ID | --cwd PATH] [--trust-repository]
-herdr worktree create [--workspace ID | --cwd PATH] [--branch NAME] [--base REF] [--path PATH] [--label TEXT] [--focus] [--no-focus] [--trust-repository]
-herdr worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]
-herdr worktree remove --workspace ID [--force] [--trust-repository]
+herdr-dumb worktree list [--workspace ID | --cwd PATH] [--trust-repository]
+herdr-dumb worktree create [--workspace ID | --cwd PATH] [--branch NAME] [--base REF] [--path PATH] [--label TEXT] [--focus] [--no-focus] [--trust-repository]
+herdr-dumb worktree open [--workspace ID | --cwd PATH] (--path PATH | --branch NAME) [--label TEXT] [--focus] [--no-focus] [--trust-repository]
+herdr-dumb worktree remove --workspace ID [--force] [--trust-repository]
 ```
 
 Worktrees are normal Herdr workspaces with Git checkout provenance. `worktree create` creates a Git worktree checkout, opens it as a workspace, and groups it with the parent repo workspace. If `--branch` names an existing local branch, Herdr checks it out; otherwise it creates the branch from `--base` or `HEAD`. Without `--path`, Herdr creates the checkout under `<worktrees.directory>/<repo>/<branch-slug>`.
@@ -187,12 +143,12 @@ Git rejects repositories owned by another user by default. If you have independe
 ## Tabs
 
 ```bash
-herdr tab list [--workspace <workspace_id>]
-herdr tab create [--workspace <workspace_id>] [--cwd PATH] [--label TEXT] [--env KEY=VALUE] [--focus] [--no-focus]
-herdr tab get <tab_id>
-herdr tab focus <tab_id>
-herdr tab rename <tab_id> <label>
-herdr tab close <tab_id>
+herdr-dumb tab list [--workspace <workspace_id>]
+herdr-dumb tab create [--workspace <workspace_id>] [--cwd PATH] [--label TEXT] [--env KEY=VALUE] [--focus] [--no-focus]
+herdr-dumb tab get <tab_id>
+herdr-dumb tab focus <tab_id>
+herdr-dumb tab rename <tab_id> <label>
+herdr-dumb tab close <tab_id>
 ```
 
 A tab is another terminal layout inside a workspace. Without `--workspace`, `tab create` uses the active workspace and fails if none exists. Its JSON response exposes `.result.tab.tab_id` and `.result.root_pane.pane_id`. Closing a workspace's last tab also closes the workspace, matching the TUI close-tab action. If `confirm_close` is enabled and closing the tab would also close a whole worktree group, `tab close` returns a `confirmation_required` error instead.
@@ -202,25 +158,25 @@ Workspace and tab creation, and pane splitting, leave focus unchanged by default
 ## Panes
 
 ```bash
-herdr pane list [--workspace <workspace_id>]
-herdr pane current [--pane ID|--current]
-herdr pane get <pane_id>
-herdr pane layout [--pane ID|--current]
-herdr pane process-info [--pane ID|--current]
-herdr pane neighbor --direction left|right|up|down [--pane ID|--current]
-herdr pane edges [--pane ID|--current]
-herdr pane focus --direction left|right|up|down [--pane ID|--current]
-herdr pane resize --direction left|right|up|down [--amount FLOAT] [--pane ID|--current]
-herdr pane zoom [<pane_id>|--pane ID|--current] [--toggle|--on|--off]
-herdr pane rename <pane_id> <label>|--clear
-herdr pane input [<pane_id>|--pane ID|--current] --right-click herdr|pane
-herdr pane split [<pane_id>|--pane ID|--current] --direction right|down [--ratio FLOAT] [--cwd PATH] [--env KEY=VALUE] [--right-click herdr|pane] [--focus] [--no-focus]
-herdr pane swap --direction left|right|up|down [--pane ID|--current]
-herdr pane swap --source-pane ID --target-pane ID
-herdr pane move <pane_id> --tab <tab_id> --split right|down [--target-pane ID] [--ratio FLOAT] [--focus|--no-focus]
-herdr pane move <pane_id> --new-tab [--workspace ID] [--label TEXT] [--focus|--no-focus]
-herdr pane move <pane_id> --new-workspace [--label TEXT] [--tab-label TEXT] [--focus|--no-focus]
-herdr pane close <pane_id>
+herdr-dumb pane list [--workspace <workspace_id>]
+herdr-dumb pane current [--pane ID|--current]
+herdr-dumb pane get <pane_id>
+herdr-dumb pane layout [--pane ID|--current]
+herdr-dumb pane process-info [--pane ID|--current]
+herdr-dumb pane neighbor --direction left|right|up|down [--pane ID|--current]
+herdr-dumb pane edges [--pane ID|--current]
+herdr-dumb pane focus --direction left|right|up|down [--pane ID|--current]
+herdr-dumb pane resize --direction left|right|up|down [--amount FLOAT] [--pane ID|--current]
+herdr-dumb pane zoom [<pane_id>|--pane ID|--current] [--toggle|--on|--off]
+herdr-dumb pane rename <pane_id> <label>|--clear
+herdr-dumb pane input [<pane_id>|--pane ID|--current] --right-click herdr|pane
+herdr-dumb pane split [<pane_id>|--pane ID|--current] --direction right|down [--ratio FLOAT] [--cwd PATH] [--env KEY=VALUE] [--right-click herdr|pane] [--focus] [--no-focus]
+herdr-dumb pane swap --direction left|right|up|down [--pane ID|--current]
+herdr-dumb pane swap --source-pane ID --target-pane ID
+herdr-dumb pane move <pane_id> --tab <tab_id> --split right|down [--target-pane ID] [--ratio FLOAT] [--focus|--no-focus]
+herdr-dumb pane move <pane_id> --new-tab [--workspace ID] [--label TEXT] [--focus|--no-focus]
+herdr-dumb pane move <pane_id> --new-workspace [--label TEXT] [--tab-label TEXT] [--focus|--no-focus]
+herdr-dumb pane close <pane_id>
 ```
 
 For pane commands that accept `--current`, Herdr uses the calling pane's
@@ -231,7 +187,7 @@ the calling pane when `HERDR_PANE_ID` is available, otherwise the focused pane.
 The split response exposes the new pane ID as `.result.pane.pane_id`.
 
 `pane input --right-click pane` forwards unmodified right-click gestures to a
-mouse-reporting pane application. `herdr` restores the default pane menu.
+mouse-reporting pane application. `herdr-dumb` restores the default pane menu.
 Right-clicking the pane frame still opens Herdr's menu. `pane split
 --right-click pane` applies the same policy to the new pane at creation.
 
@@ -240,9 +196,9 @@ After `pane move`, use `.result.move_result.pane.pane_id` for later commands. A 
 Read output:
 
 ```bash
-herdr pane read <pane_id> [--source visible|recent|recent-unwrapped|detection] [--lines N] [--format text|ansi] [--ansi] [--raw]
-herdr pane read <pane_id> --source visible --ansi
-herdr pane read <pane_id> --source recent-unwrapped --lines 120
+herdr-dumb pane read <pane_id> [--source visible|recent|recent-unwrapped|detection] [--lines N] [--format text|ansi] [--ansi] [--raw]
+herdr-dumb pane read <pane_id> --source visible --ansi
+herdr-dumb pane read <pane_id> --source recent-unwrapped --lines 120
 ```
 
 `pane read` prints UTF-8 terminal text directly. ANSI escapes are stripped by default; use `--format ansi` or `--ansi` to preserve them where the source exposes styling. The `detection` source is always plain text. For recent sources, `--lines N` selects the last N rendered terminal rows before optional unwrapping; without it, reads default to 80 rows. For `visible` and `detection`, omitting `--lines` returns the full snapshot, while specifying it keeps the last N newline-delimited lines. `agent read` uses the same output and line behavior.
@@ -250,9 +206,9 @@ herdr pane read <pane_id> --source recent-unwrapped --lines 120
 Send input:
 
 ```bash
-herdr pane send-text <pane_id> <text>
-herdr pane send-keys <pane_id> <key> [key ...]
-herdr pane run <pane_id> <command>
+herdr-dumb pane send-text <pane_id> <text>
+herdr-dumb pane send-keys <pane_id> <key> [key ...]
+herdr-dumb pane run <pane_id> <command>
 ```
 
 `<key>` uses Herdr key-combo syntax: plain printable keys such as `a`,
@@ -268,7 +224,7 @@ aliases for `ctrl+c`.
 Report agent state from custom hooks:
 
 ```bash
-herdr pane report-agent <pane_id> \
+herdr-dumb pane report-agent <pane_id> \
   --source ID \
   --agent LABEL \
   --state idle|working|blocked|unknown \
@@ -277,7 +233,7 @@ herdr pane report-agent <pane_id> \
   [--agent-session-id ID] \
   [--agent-session-path PATH]
 
-herdr pane report-agent-session <pane_id> \
+herdr-dumb pane report-agent-session <pane_id> \
   --source ID \
   --agent LABEL \
   [--seq N] \
@@ -285,7 +241,7 @@ herdr pane report-agent-session <pane_id> \
   [--agent-session-path PATH] \
   [--session-start-source SOURCE]
 
-herdr pane release-agent <pane_id> \
+herdr-dumb pane release-agent <pane_id> \
   --source ID \
   --agent LABEL \
   [--seq N]
@@ -302,7 +258,7 @@ Those commands include `foreground_cwd` when Herdr can resolve the cwd of the fo
 Report display-only pane metadata without taking over semantic state:
 
 ```bash
-herdr pane report-metadata <pane_id> \
+herdr-dumb pane report-metadata <pane_id> \
   --source ID \
   [--agent LABEL] \
   [--applies-to-source ID] \
@@ -329,18 +285,18 @@ Metadata text is normalized before storage. Herdr trims surrounding whitespace, 
 For the pane-versus-agent model and complete orchestration examples, see [Agent automation](/docs/agent-automation/).
 
 ```bash
-herdr agent list
-herdr agent get <target>
-herdr agent read <target> [--source visible|recent|recent-unwrapped|detection] [--lines N] [--format text|ansi] [--ansi]
-herdr agent send-keys <target> <key> [key ...]
-herdr agent prompt <target> <text> [--wait] [--until STATUS]... [--timeout MS]
-herdr agent rename <target> <name>|--clear
-herdr agent focus <target>
-herdr agent wait <target> [--until STATUS]... [--timeout MS]
-herdr agent attach <target> [--takeover]
-herdr agent start <name> --kind KIND --pane ID [--timeout MS] [-- <agent-args...>]
-herdr agent explain <target> [--json|--verbose]
-herdr agent explain --file PATH --agent LABEL [--json|--verbose]
+herdr-dumb agent list
+herdr-dumb agent get <target>
+herdr-dumb agent read <target> [--source visible|recent|recent-unwrapped|detection] [--lines N] [--format text|ansi] [--ansi]
+herdr-dumb agent send-keys <target> <key> [key ...]
+herdr-dumb agent prompt <target> <text> [--wait] [--until STATUS]... [--timeout MS]
+herdr-dumb agent rename <target> <name>|--clear
+herdr-dumb agent focus <target>
+herdr-dumb agent wait <target> [--until STATUS]... [--timeout MS]
+herdr-dumb agent attach <target> [--takeover]
+herdr-dumb agent start <name> --kind KIND --pane ID [--timeout MS] [-- <agent-args...>]
+herdr-dumb agent explain <target> [--json|--verbose]
+herdr-dumb agent explain --file PATH --agent LABEL [--json|--verbose]
 ```
 
 Agent targets are either a unique live agent name or the pane ID that currently hosts the agent. Terminal IDs and bare agent-kind labels are not agent targets. Agents started through `agent start` require a name; manually launched agents remain unnamed and use their pane ID.
@@ -362,11 +318,11 @@ Use `pane send-text`, `pane send-keys`, `pane run`, and `terminal attach` for or
 ## Direct terminal attach
 
 ```bash
-herdr terminal attach <terminal_id> [--takeover]
-herdr terminal session control <target> [--takeover] [--cols N] [--rows N]
-herdr terminal session observe <target> [--cols N] [--rows N]
-herdr terminal title set <title>
-herdr terminal title clear
+herdr-dumb terminal attach <terminal_id> [--takeover]
+herdr-dumb terminal session control <target> [--takeover] [--cols N] [--rows N]
+herdr-dumb terminal session observe <target> [--cols N] [--rows N]
+herdr-dumb terminal title set <title>
+herdr-dumb terminal title clear
 ```
 
 Detach from direct attach with `ctrl+b q`. Send literal `ctrl+b` with `ctrl+b ctrl+b`.
@@ -391,7 +347,7 @@ the pane and other clients keep running. Quiet panes do not trigger this timeout
 Wait for output in a pane:
 
 ```bash
-herdr pane wait-output <pane_id> (--match <text> | --regex <pattern>) [--source visible|recent|recent-unwrapped] [--lines N] [--timeout MS] [--raw]
+herdr-dumb pane wait-output <pane_id> (--match <text> | --regex <pattern>) [--source visible|recent|recent-unwrapped] [--lines N] [--timeout MS] [--raw]
 ```
 
 Use `pane wait-output` for normal commands and servers. Use `agent wait` for coding agents.
@@ -405,41 +361,41 @@ A timeout or `agent_prompt_stalled` does not prove the prompt was never delivere
 ## Integrations
 
 ```bash
-herdr integration install pi
-herdr integration install omp
-herdr integration install claude
-herdr integration install codex
-herdr integration install copilot
-herdr integration install devin
-herdr integration install droid
-herdr integration install kimi
-herdr integration install opencode
-herdr integration install kilo
-herdr integration install hermes
-herdr integration install qodercli
-herdr integration install qwen
-herdr integration install letta
-herdr integration install cursor
-herdr integration install mastracode
-herdr integration install grok
-herdr integration uninstall pi
-herdr integration uninstall omp
-herdr integration uninstall claude
-herdr integration uninstall codex
-herdr integration uninstall copilot
-herdr integration uninstall devin
-herdr integration uninstall droid
-herdr integration uninstall kimi
-herdr integration uninstall opencode
-herdr integration uninstall kilo
-herdr integration uninstall hermes
-herdr integration uninstall qodercli
-herdr integration uninstall qwen
-herdr integration uninstall letta
-herdr integration uninstall cursor
-herdr integration uninstall mastracode
-herdr integration uninstall grok
-herdr integration status [--outdated-only]
+herdr-dumb integration install pi
+herdr-dumb integration install omp
+herdr-dumb integration install claude
+herdr-dumb integration install codex
+herdr-dumb integration install copilot
+herdr-dumb integration install devin
+herdr-dumb integration install droid
+herdr-dumb integration install kimi
+herdr-dumb integration install opencode
+herdr-dumb integration install kilo
+herdr-dumb integration install hermes
+herdr-dumb integration install qodercli
+herdr-dumb integration install qwen
+herdr-dumb integration install letta
+herdr-dumb integration install cursor
+herdr-dumb integration install mastracode
+herdr-dumb integration install grok
+herdr-dumb integration uninstall pi
+herdr-dumb integration uninstall omp
+herdr-dumb integration uninstall claude
+herdr-dumb integration uninstall codex
+herdr-dumb integration uninstall copilot
+herdr-dumb integration uninstall devin
+herdr-dumb integration uninstall droid
+herdr-dumb integration uninstall kimi
+herdr-dumb integration uninstall opencode
+herdr-dumb integration uninstall kilo
+herdr-dumb integration uninstall hermes
+herdr-dumb integration uninstall qodercli
+herdr-dumb integration uninstall qwen
+herdr-dumb integration uninstall letta
+herdr-dumb integration uninstall cursor
+herdr-dumb integration uninstall mastracode
+herdr-dumb integration uninstall grok
+herdr-dumb integration status [--outdated-only]
 ```
 
 ## Plugins
@@ -449,11 +405,11 @@ Plugin commands install and run local executable workflow plugins. A plugin is a
 Install, list, and remove plugins:
 
 ```bash
-herdr plugin install <owner>/<repo>[/subdir...] [--ref REF] [--yes]
-herdr plugin list [--plugin ID] [--json]
-herdr plugin uninstall <plugin_id|owner/repo[/subdir...]>
-herdr plugin enable <plugin_id>
-herdr plugin disable <plugin_id>
+herdr-dumb plugin install <owner>/<repo>[/subdir...] [--ref REF] [--yes]
+herdr-dumb plugin list [--plugin ID] [--json]
+herdr-dumb plugin uninstall <plugin_id|owner/repo[/subdir...]>
+herdr-dumb plugin enable <plugin_id>
+herdr-dumb plugin disable <plugin_id>
 ```
 
 `plugin install` accepts GitHub shorthand only, such as `ogulcancelik/herdr-plugin-examples/worktree-bootstrap`. It uses `git`, shows a trust preview in interactive terminals, runs supported manifest build commands, and stores GitHub installs in a Herdr-managed directory. Use `--yes` for noninteractive installs. Reinstalling a GitHub-managed plugin replaces that managed checkout. Installing over a locally linked plugin is refused. Plugin manifests must declare `min_herdr_version`; install and link fail when the plugin requires a newer Herdr binary. `plugin list` is human-readable by default; pass `--json` for the raw API response.
@@ -463,8 +419,8 @@ Plugin installation and enabled state are global to the current user. A plugin i
 Local development:
 
 ```bash
-herdr plugin link <path> [--disabled]
-herdr plugin unlink <plugin_id>
+herdr-dumb plugin link <path> [--disabled]
+herdr-dumb plugin unlink <plugin_id>
 ```
 
 `plugin link` accepts a plugin directory containing `herdr-plugin.toml` or a direct manifest path. Use it while authoring or testing a plugin from a local checkout. `plugin unlink` unregisters the plugin and leaves files alone. `plugin uninstall` unregisters a plugin and also removes Herdr-managed GitHub checkout files. For GitHub installs, uninstall accepts either the plugin id or the same `owner/repo[/subdir...]` shorthand used by install. Actions, event hooks, panes, and link handlers are declared in the manifest; runtime action registration is not part of v1.
@@ -472,7 +428,7 @@ herdr plugin unlink <plugin_id>
 Config directory:
 
 ```bash
-herdr plugin config-dir <plugin_id>
+herdr-dumb plugin config-dir <plugin_id>
 ```
 
 `plugin config-dir` prints the plugin's config directory. It creates the directory if needed and seeds it from legacy plugin config locations when present. Use it in setup docs and shell scripts to point users at a stable path for `.env` files and other user-editable config, separate from the managed plugin checkout.
@@ -480,8 +436,8 @@ herdr plugin config-dir <plugin_id>
 Actions:
 
 ```bash
-herdr plugin action list [--plugin ID]
-herdr plugin action invoke <action_id> [--plugin ID]
+herdr-dumb plugin action list [--plugin ID]
+herdr-dumb plugin action invoke <action_id> [--plugin ID]
 ```
 
 `plugin action invoke` starts the manifest command for an installed, enabled,
@@ -493,15 +449,15 @@ so qualified ids remain unambiguous even when plugin ids contain dots.
 Logs:
 
 ```bash
-herdr plugin log list [--plugin ID] [--limit N]
+herdr-dumb plugin log list [--plugin ID] [--limit N]
 ```
 
 Managed terminal panes:
 
 ```bash
-herdr plugin pane open --plugin ID --entrypoint ID [--placement overlay|popup|split|tab|zoomed] [--width SIZE] [--height SIZE] [--workspace ID] [--target-pane PANE] [--direction right|down] [--cwd PATH] [--env KEY=VALUE] [--focus|--no-focus]
-herdr plugin pane focus <pane_id>
-herdr plugin pane close <pane_id>
+herdr-dumb plugin pane open --plugin ID --entrypoint ID [--placement overlay|popup|split|tab|zoomed] [--width SIZE] [--height SIZE] [--workspace ID] [--target-pane PANE] [--direction right|down] [--cwd PATH] [--env KEY=VALUE] [--focus|--no-focus]
+herdr-dumb plugin pane focus <pane_id>
+herdr-dumb plugin pane close <pane_id>
 ```
 
 `plugin pane open` requires the plugin to be linked, enabled, and compatible

@@ -78,13 +78,6 @@ impl ApiClient {
         self.read_status(None)
     }
 
-    pub(crate) fn status_with_timeout(
-        &self,
-        timeout: Duration,
-    ) -> Result<crate::api::RuntimeStatus, ApiClientError> {
-        self.read_status(Some(timeout))
-    }
-
     fn read_status(
         &self,
         timeout: Option<Duration>,
@@ -273,7 +266,7 @@ mod tests {
         });
         let client = ApiClient::for_target(ConnectionTarget::SocketPath(path.clone()));
         let error = client
-            .status_with_timeout(Duration::from_millis(100))
+            .read_status(Some(Duration::from_millis(100)))
             .unwrap_err();
         assert!(
             matches!(error, ApiClientError::Io(error) if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock))

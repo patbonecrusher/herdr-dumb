@@ -287,6 +287,7 @@ pub(crate) fn reload_manifests() -> Vec<AgentManifestSummary> {
     summaries
 }
 
+#[cfg(test)]
 pub(crate) fn reload_manifests_for_agents(agents: &[Agent]) {
     if agents.is_empty() {
         return;
@@ -892,7 +893,6 @@ pub fn explain_to_json_value(explain: &DetectionExplain) -> serde_json::Value {
 
 pub(crate) struct ParsedRemoteManifest {
     pub(crate) manifest: AgentManifest,
-    pub(crate) version: ManifestVersion,
 }
 
 pub(crate) fn parse_manifest(content: &str) -> Result<AgentManifest, String> {
@@ -913,7 +913,7 @@ pub(crate) fn parse_remote_manifest_for_agent(
             agent_label(agent)
         ));
     }
-    let version = manifest
+    manifest
         .version
         .clone()
         .ok_or("remote manifest must include version")?;
@@ -926,7 +926,7 @@ pub(crate) fn parse_remote_manifest_for_agent(
             super::manifest_update::MANIFEST_ENGINE_VERSION
         ));
     }
-    Ok(ParsedRemoteManifest { manifest, version })
+    Ok(ParsedRemoteManifest { manifest })
 }
 
 fn validate_manifest(manifest: &AgentManifest) -> Result<(), String> {

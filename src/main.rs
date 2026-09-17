@@ -16,7 +16,6 @@ mod agent_view_eval;
 mod api;
 mod app;
 mod build_info;
-mod checksum;
 mod cli;
 mod client;
 mod config;
@@ -45,7 +44,6 @@ mod protocol;
 mod pty;
 mod raw_input;
 mod release_notes;
-mod remote;
 mod render_prof;
 mod render_signal;
 mod selection;
@@ -62,7 +60,7 @@ mod update;
 mod workspace;
 mod worktree;
 
-const DEFAULT_CONFIG: &str = r##"# herdr configuration
+const DEFAULT_CONFIG: &str = r##"# herdr-dumb configuration
 # Place this file at ~/.config/herdr/config.toml
 
 # Show first-run notification setup on startup.
@@ -118,18 +116,6 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Render pane images in Kitty graphics-compatible outer terminals.
 # kitty_graphics = true
 
-[update]
-# Update channel used by background version checks and `herdr update`.
-# Stable builds default to "stable". Windows preview builds default to "preview"
-# so existing preview installs stay there until explicitly switched.
-# channel = "stable"
-
-# Check herdr.dev for new Herdr versions in the background.
-# version_check = true
-
-# Check herdr.dev for remote agent-detection manifest updates in the background.
-# manifest_check = true
-
 [keys]
 # Prefix key to enter prefix mode (default: "ctrl+b")
 # Examples: "ctrl+b", "f12", "esc", "-"
@@ -160,7 +146,6 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # previous_agent = ""     # optional, unset by default
 # next_agent = ""         # optional, unset by default
 # focus_agent = ""        # optional indexed binding, e.g. "prefix+alt+1..9"
-# remote_image_paste = "ctrl+v" # only active in herdr --remote; empty disables raw-key image paste
 # new_tab = "prefix+c"
 # rename_tab = "prefix+shift+t"
 # previous_tab = "prefix+p"
@@ -322,7 +307,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # show in title, tab, and group bars. Tokens are {hostname}, {workspace}, {tab},
 # {pane}, and {terminal_title}; {{ and }} are literal braces.
 # The title renders on the Herdr server, so {hostname} names the host the panes
-# run on even when attaching from a remote client.
+# run on.
 # Set to "" to leave the outer terminal title alone.
 # window_title = "{hostname}: {workspace}"
 
@@ -362,7 +347,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Background notification popup delivery
 [ui.toast]
 # off = disable pop-up notifications
-# herdr = show in-app toasts
+# herdr-dumb = show in-app toasts
 # terminal = ask the outer terminal to show a desktop notification
 # system = ask the OS notification service directly
 # delivery = "off"
@@ -393,19 +378,8 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # a Herdr server restart. Requires official integrations that report session refs.
 # resume_agents_on_restore = true
 
-[remote]
-# Whether herdr manages the ssh config used for `herdr --remote`.
-# When true (default), herdr runs remote ssh through a generated config that
-# includes your ~/.ssh/config first and adds ServerAliveInterval/
-# ServerAliveCountMax as fallbacks (so any keepalive values you set yourself
-# still win) to survive idle network/NAT timeouts. Herdr also uses a private
-# per-attach OpenSSH control socket to reuse the first authenticated connection.
-# Set false to run plain ssh against your ssh config unchanged — this does not
-# force keepalive or multiplexing off, it only stops herdr from adding its own.
-# manage_ssh_config = true
-
 [experimental]
-# Allow launching herdr from inside a herdr-managed pane.
+# Allow launching herdr-dumb from inside a herdr-managed pane.
 # allow_nested = false
 # Save recent pane screen history across full server restarts.
 pane_history = false
@@ -439,7 +413,7 @@ pane_history = false
 "##;
 
 // Bundled at build time so the printed skill always matches this binary's release.
-const SKILL: &str = include_str!("../skills/herdr/SKILL.md");
+const SKILL: &str = include_str!("agent-guide.md");
 
 fn should_block_nested(config: &config::Config) -> bool {
     should_block_nested_for_env(config, std::env::var(HERDR_ENV_VAR).ok().as_deref())
@@ -462,7 +436,7 @@ fn random_nested_message() -> &'static str {
 
 fn exit_if_nested_disabled(config: &config::Config) {
     if should_block_nested(config) {
-        eprintln!("\x1b[1merror:\x1b[0m nested herdr is disabled by default.");
+        eprintln!("\x1b[1merror:\x1b[0m nested herdr-dumb is disabled by default.");
         eprintln!("see configuration if you want to enable it.");
         eprintln!();
         eprintln!("\x1b[2m\"{}\"\x1b[0m", random_nested_message());
@@ -505,54 +479,19 @@ fn main() -> io::Result<()> {
         Ok(args) => args,
         Err(err) => {
             eprintln!("error: {err}");
-            eprintln!("run 'herdr --help' for usage");
+            eprintln!("run 'herdr-dumb --help' for usage");
             std::process::exit(2);
         }
     };
-    if let Some(outcome) = cli::maybe_run_machine(&raw_args) {
-        return finish_cli(outcome);
-    }
     let args = match session::configure_from_args(&raw_args) {
         Ok(args) => args,
         Err(err) => {
             eprintln!("error: {err}");
-            eprintln!("run 'herdr --help' for usage");
+            eprintln!("run 'herdr-dumb --help' for usage");
             std::process::exit(2);
         }
     };
-    let (args, remote_launch) = match remote::extract_remote_args(&args) {
-        Ok(parsed) => parsed,
-        Err(err) => {
-            eprintln!("error: {err}");
-            eprintln!("run 'herdr --help' for usage");
-            std::process::exit(2);
-        }
-    };
-
-    if remote_launch.is_some()
-        && args.get(1).is_some()
-        && !args.iter().any(|a| {
-            matches!(
-                a.as_str(),
-                "--help" | "-h" | "--version" | "-V" | "--default-config" | "--skill"
-            )
-        })
-    {
-        eprintln!("error: --remote can only be used with the default launch command");
-        eprintln!("run 'herdr --help' for usage");
-        std::process::exit(2);
-    }
-
     finish_cli(cli::maybe_run(&args))?;
-
-    if args.get(1).map(String::as_str) == Some("remote-api-bridge") {
-        return remote::run_remote_api_bridge(&args[2..]);
-    }
-
-    // Subcommands and flags (no TUI, no logging needed)
-    if args.get(1).map(|s| s.as_str()) == Some("remote-client-bridge") {
-        return remote::run_remote_client_bridge(&args[2..]);
-    }
 
     if args.get(1).map(|s| s.as_str()) == Some("server") {
         return server::headless::run_server();
@@ -565,121 +504,85 @@ fn main() -> io::Result<()> {
         return client::run_client();
     }
 
-    if args.get(1).map(|s| s.as_str()) == Some("update") {
-        let options = match update::parse_self_update_args(&args[2..]) {
-            Ok(options) => options,
-            Err(err) if err.starts_with("usage:") => {
-                eprintln!("{err}");
-                std::process::exit(0);
-            }
-            Err(err) => {
-                eprintln!("{err}");
-                eprintln!("usage: herdr update [--handoff]");
-                std::process::exit(2);
-            }
-        };
-        match update::self_update(options) {
-            Ok(_) => return Ok(()),
-            Err(e) => {
-                if e.starts_with("self-update is disabled") {
-                    eprintln!("{e}");
-                } else {
-                    eprintln!("update failed: {e}");
-                }
-                std::process::exit(1);
-            }
-        }
-    }
-
     if args.iter().any(|a| a == "--help" || a == "-h") {
         platform::begin_cli_output();
-        println!("herdr — terminal workspace manager for AI coding agents");
+        println!("herdr-dumb — terminal workspace manager for AI coding agents");
         println!();
-        println!("Usage: herdr [options]");
-        println!("       herdr --session <name> [options]");
-        println!("       herdr --machine <label-or-id> <command>");
-        println!("       herdr --remote <ssh-target> [--session <name>]");
-        println!("       herdr session attach <name>");
-        println!("       herdr completion zsh");
-        println!("       herdr update [--handoff]");
-        println!("       herdr channel set <stable|preview>");
-        println!("       herdr machine <subcommand> ...");
-        println!("       herdr server stop");
-        println!("       herdr server reload-config");
-        println!("       herdr api <subcommand> ...");
-        println!("       herdr completion <shell>");
-        println!("       herdr config <subcommand> ...");
-        println!("       herdr channel <subcommand> ...");
-        println!("       herdr workspace <subcommand> ...");
-        println!("       herdr worktree <subcommand> ...");
-        println!("       herdr tab <subcommand> ...");
-        println!("       herdr notification <subcommand> ...");
-        println!("       herdr agent <subcommand> ...");
-        println!("       herdr pane <subcommand> ...");
-        println!("       herdr session <subcommand> ...");
-        println!("       herdr integration <subcommand> ...");
+        println!("Usage: herdr-dumb [options]");
+        println!("       herdr-dumb --session <name> [options]");
+        println!("       herdr-dumb session attach <name>");
+        println!("       herdr-dumb completion zsh");
+        println!("       herdr-dumb server stop");
+        println!("       herdr-dumb server reload-config");
+        println!("       herdr-dumb api <subcommand> ...");
+        println!("       herdr-dumb completion <shell>");
+        println!("       herdr-dumb config <subcommand> ...");
+        println!("       herdr-dumb workspace <subcommand> ...");
+        println!("       herdr-dumb worktree <subcommand> ...");
+        println!("       herdr-dumb tab <subcommand> ...");
+        println!("       herdr-dumb notification <subcommand> ...");
+        println!("       herdr-dumb agent <subcommand> ...");
+        println!("       herdr-dumb pane <subcommand> ...");
+        println!("       herdr-dumb session <subcommand> ...");
+        println!("       herdr-dumb integration <subcommand> ...");
         println!();
         println!("Common commands:");
         for (command, description) in [
-            ("herdr", "Launch or attach to the persistent session"),
+            ("herdr-dumb", "Launch or attach to the persistent session"),
             (
-                "herdr status [server|client]",
+                "herdr-dumb status [server|client]",
                 "Show local client and running server status",
             ),
-            ("herdr update", "Download and install the latest version"),
-            ("herdr completion zsh", "Generate shell completions for zsh"),
             (
-                "herdr server stop",
+                "herdr-dumb completion zsh",
+                "Generate shell completions for zsh",
+            ),
+            (
+                "herdr-dumb server stop",
                 "Stop the running server via the API socket",
             ),
             (
-                "herdr channel set <stable|preview>",
-                "Choose the stable or preview update channel",
-            ),
-            (
-                "herdr server reload-config",
+                "herdr-dumb server reload-config",
                 "Reload config.toml in the running server",
             ),
             (
-                "herdr config reset-keys",
+                "herdr-dumb config reset-keys",
                 "Back up config.toml and remove custom keybindings",
             ),
             (
-                "herdr channel <subcommand>",
-                "Manage the stable or preview update channel",
-            ),
-            ("herdr machine <subcommand>", "Manage saved SSH machines"),
-            (
-                "herdr api <subcommand>",
+                "herdr-dumb api <subcommand>",
                 "Inspect socket API metadata and live runtime state",
             ),
             (
-                "herdr workspace <subcommand>",
+                "herdr-dumb workspace <subcommand>",
                 "Workspace helpers over the socket API",
             ),
             (
-                "herdr worktree <subcommand>",
+                "herdr-dumb worktree <subcommand>",
                 "Git worktree helpers over the socket API",
             ),
-            ("herdr tab <subcommand>", "Tab helpers over the socket API"),
             (
-                "herdr notification <subcommand>",
+                "herdr-dumb tab <subcommand>",
+                "Tab helpers over the socket API",
+            ),
+            (
+                "herdr-dumb notification <subcommand>",
                 "Notification helpers over the socket API",
             ),
             (
-                "herdr agent <subcommand>",
+                "herdr-dumb agent <subcommand>",
                 "Agent/terminal helpers over the socket API",
             ),
             (
-                "herdr pane <subcommand>",
+                "herdr-dumb pane <subcommand>",
                 "Pane control helpers over the socket API",
             ),
             (
-                "herdr session <subcommand>",
+                "herdr-dumb session <subcommand>",
                 "Manage named persistent sessions",
             ),
             (
-                "herdr integration <subcommand>",
+                "herdr-dumb integration <subcommand>",
                 "Manage built-in agent integrations",
             ),
         ] {
@@ -687,15 +590,10 @@ fn main() -> io::Result<()> {
         }
         println!();
         println!("Advanced commands:");
-        println!("  {:<32} Run as headless server", "herdr server");
+        println!("  {:<32} Run as headless server", "herdr-dumb server");
         println!();
         println!("Options:");
         println!("  --session <name>    Use or create a named persistent session");
-        println!("  --machine <label-or-id>  Run an API command on a saved SSH machine");
-        println!("  --remote <target>   Attach through SSH to a remote Herdr server");
-        println!("  --remote-keybindings <local|server>");
-        println!("                      Keybindings for --remote app attach (default: local)");
-        println!("  --handoff           Opt into live handoff for update or remote attach");
         println!("  --default-config    Print default configuration and exit");
         println!("  --skill             Print the agent skill file and exit");
         println!("  --version, -V       Print version and exit");
@@ -712,7 +610,7 @@ fn main() -> io::Result<()> {
 
     if args.iter().any(|a| a == "--version" || a == "-V") {
         platform::begin_cli_output();
-        println!("herdr {}", crate::build_info::version());
+        println!("herdr-dumb {}", crate::build_info::version());
         return Ok(());
     }
 
@@ -731,9 +629,6 @@ fn main() -> io::Result<()> {
     // Reject unknown flags
     let known_flags = [
         "--session",
-        "--machine",
-        "--remote",
-        "--remote-keybindings",
         "--version",
         "-V",
         "--default-config",
@@ -745,19 +640,15 @@ fn main() -> io::Result<()> {
         let arg_name = arg.split_once('=').map(|(name, _)| name).unwrap_or(arg);
         if arg.starts_with('-') && !known_flags.contains(&arg_name) {
             eprintln!("unknown option: {arg}");
-            eprintln!("run 'herdr --help' for usage");
+            eprintln!("run 'herdr-dumb --help' for usage");
             std::process::exit(2);
         }
         if !arg.starts_with('-')
             && ![
                 "server",
                 "client",
-                "remote-client-bridge",
-                "update",
                 "status",
                 "config",
-                "channel",
-                "machine",
                 "workspace",
                 "worktree",
                 "pane",
@@ -767,27 +658,15 @@ fn main() -> io::Result<()> {
             .contains(&arg.as_str())
         {
             eprintln!("unknown command: {arg}");
-            eprintln!("run 'herdr --help' for usage");
+            eprintln!("run 'herdr-dumb --help' for usage");
             std::process::exit(2);
         }
-    }
-
-    if let Some(remote_launch) = remote_launch {
-        let remote_target = remote_launch.target.clone();
-        if let Err(err) = remote::run_remote(remote_launch) {
-            eprintln!("error: {err}");
-            remote::print_remote_error_hint(&err, &remote_target);
-            std::process::exit(1);
-        }
-        return Ok(());
     }
 
     let loaded_config = config::Config::load();
     exit_if_nested_disabled(&loaded_config.config);
 
-    let saved_federation =
-        client::endpoint::EndpointCatalog::load().is_ok_and(|catalog| catalog.has_enabled_ssh());
-    if let Err(err) = server::autodetect::auto_detect_launch(saved_federation) {
+    if let Err(err) = server::autodetect::auto_detect_launch() {
         eprintln!("herdr: {err}");
         std::process::exit(1);
     }

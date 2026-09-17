@@ -388,8 +388,9 @@ mod tests {
         let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
         let mut local = notification();
         local.event.title = "local".into();
-        let remote_id = ClientEndpointId::Ssh(
-            crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+        let remote_id = ClientEndpointId::Test(
+            crate::client::endpoint::TestEndpointId::parse("0123456789abcdef0123456789abcdef")
+                .unwrap(),
         );
         let mut remote = notification();
         remote.endpoint_id = remote_id.clone();

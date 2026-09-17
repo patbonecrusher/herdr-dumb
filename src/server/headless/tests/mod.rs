@@ -146,7 +146,6 @@ fn completed_handoff_disables_only_old_server_session_persistence() {
     assert!(!server.app.policy.persist_session);
     assert!(server.app.policy.restore_session);
     assert!(server.app.policy.persist_plugin_registry);
-    assert!(server.app.policy.background_updates);
 }
 
 #[test]
@@ -5210,16 +5209,6 @@ fn headless_scheduled_tasks_expire_agent_metadata() {
         }));
 }
 
-#[test]
-fn headless_scheduled_tasks_clears_disabled_agent_manifest_update_deadline() {
-    let mut server = test_headless_server();
-    let now = Instant::now();
-    server.app.next_agent_manifest_update_check = Some(now - Duration::from_millis(1));
-
-    assert!(!server.handle_scheduled_tasks_headless(now, false));
-    assert_eq!(server.app.next_agent_manifest_update_check, None);
-}
-
 #[cfg(unix)]
 #[tokio::test]
 async fn headless_scheduled_tasks_start_pending_agent_resume_without_foreground_client() {
@@ -6434,7 +6423,7 @@ fn update_notification_is_semantic_for_system_delivery() {
             assert_eq!(notification.title, "Herdr v9.9.9 available");
             assert_eq!(
                 notification.body.as_deref(),
-                Some("detach, run `herdr update`, then run Herdr again to reconnect")
+                Some("Updates are disabled in `herdr-dumb`; rebuild and install manually.")
             );
         }
         other => panic!("expected semantic update notification, got {other:?}"),

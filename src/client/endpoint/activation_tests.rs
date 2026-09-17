@@ -1,8 +1,8 @@
 use super::*;
 
 fn endpoint() -> ClientEndpointId {
-    ClientEndpointId::Ssh(
-        super::super::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+    ClientEndpointId::Test(
+        super::super::TestEndpointId::parse("0123456789abcdef0123456789abcdef").unwrap(),
     )
 }
 
@@ -86,15 +86,13 @@ fn shell_and_registry_with_source_failure(source_fail_after_write: bool) -> Test
     let mut shell = crate::client::ClientShellState::new(
         crate::client::ClientShellConfig::from_config(&crate::config::Config::default()),
     );
-    let profile = super::super::SavedSshEndpoint {
-        id: super::super::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+    let profile = super::super::TestEndpoint {
+        id: super::super::TestEndpointId::parse("0123456789abcdef0123456789abcdef").unwrap(),
         label: "Remote".into(),
-        target: "dev@example.com".into(),
-        session: "main".into(),
         enabled: true,
     };
-    let target = ClientEndpointId::Ssh(profile.id.clone());
-    shell.set_endpoint_catalog(&[profile]);
+    let target = ClientEndpointId::Test(profile.id.clone());
+    shell.set_test_endpoints(&[profile]);
     shell.set_snapshot(Box::new(test_snapshot("local-boot", 1)));
     shell.set_endpoint_status(&target, ClientEndpointStatus::Online);
     shell.set_endpoint_snapshot(&target, Box::new(test_snapshot("remote-boot", 1)));

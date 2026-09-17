@@ -9,21 +9,19 @@ const KNOWN_TOP_LEVEL_CONFIG_KEYS: &[&str] = &[
     "experimental",
     "keys",
     "onboarding",
-    "remote",
     "server",
     "session",
     "terminal",
     "theme",
     "ui",
-    "update",
     "worktrees",
 ];
 
 pub fn app_dir_name() -> &'static str {
     if cfg!(debug_assertions) {
-        "herdr-dev"
+        "herdr-dumb-dev"
     } else {
-        "herdr"
+        "herdr-dumb"
     }
 }
 
@@ -239,7 +237,7 @@ pub fn config_diagnostic_summary(diagnostics: &[String]) -> Option<String> {
         ""
     };
 
-    Some(format!("{target}{impact}; herdr config check"))
+    Some(format!("{target}{impact}; herdr-dumb config check"))
 }
 
 pub fn load_live_config() -> Result<LoadedConfig, Vec<String>> {
@@ -329,14 +327,6 @@ fn load_live_config_from_str(content: &str) -> Result<LoadedConfig, Vec<String>>
     );
     load_live_section(
         table,
-        "update",
-        "update config",
-        &mut diagnostics,
-        &mut invalid_sections,
-        |section| config.update = section,
-    );
-    load_live_section(
-        table,
         "ui",
         "ui config",
         &mut diagnostics,
@@ -366,14 +356,6 @@ fn load_live_config_from_str(content: &str) -> Result<LoadedConfig, Vec<String>>
         &mut diagnostics,
         &mut invalid_sections,
         |section| config.experimental = section,
-    );
-    load_live_section(
-        table,
-        "remote",
-        "remote config",
-        &mut diagnostics,
-        &mut invalid_sections,
-        |section| config.remote = section,
     );
 
     diagnostics.extend(config.theme.diagnostics());
@@ -788,7 +770,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml; herdr config check")
+            Some("config.toml; herdr-dumb config check")
         );
     }
 
@@ -801,7 +783,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml has unknown keys; herdr config check")
+            Some("config.toml has unknown keys; herdr-dumb config check")
         );
     }
 
@@ -814,7 +796,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml; herdr config check")
+            Some("config.toml; herdr-dumb config check")
         );
     }
 
@@ -827,7 +809,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml invalid; using defaults; herdr config check")
+            Some("config.toml invalid; using defaults; herdr-dumb config check")
         );
     }
 
@@ -836,14 +818,14 @@ mod tests {
         let startup = vec!["config read error: permission denied; using defaults".to_string()];
         assert_eq!(
             config_diagnostic_summary(&startup).as_deref(),
-            Some("config.toml unreadable; using defaults; herdr config check")
+            Some("config.toml unreadable; using defaults; herdr-dumb config check")
         );
 
         let reload =
             vec!["config read error: permission denied; keeping current config".to_string()];
         assert_eq!(
             config_diagnostic_summary(&reload).as_deref(),
-            Some("config.toml unreadable; keeping current config; herdr config check")
+            Some("config.toml unreadable; keeping current config; herdr-dumb config check")
         );
     }
 
@@ -856,7 +838,7 @@ mod tests {
 
         assert_eq!(
             config_diagnostic_summary(&diagnostics).as_deref(),
-            Some("config.toml invalid; keeping current config; herdr config check")
+            Some("config.toml invalid; keeping current config; herdr-dumb config check")
         );
     }
 

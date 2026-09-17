@@ -103,10 +103,6 @@ Restart the terminal so it reloads its environment, then confirm the Herdr insta
 
 The operating system or outer terminal may consume the chord before Herdr receives it. Free the chord in that layer or choose another binding. See [Keyboard](/docs/keyboard/#going-prefix-free) for known conflicts and safe defaults.
 
-## Remote attach cannot authenticate
-
-First confirm that normal OpenSSH works with `ssh <host>`. For a passphrase-protected key in a non-interactive shell, CI job, or mobile terminal, load the key into `ssh-agent` before starting remote attach. See [Persistence and remote access](/docs/persistence-remote/#remote-attach-over-ssh).
-
 ## Find diagnostic logs
 
 Herdr logs live in `~/.config/herdr/` by default:

@@ -461,11 +461,7 @@ Built-in filter fields are `status`, `workspace_id`, `tab_id`, `pane_id`,
 `agent`, `seen`, and `state_change_seq`. Use `{"token":"name"}` as a field to
 filter plugin-reported pane metadata. Values are strings, booleans, unsigned
 numbers, or a context object. Context values are `current_workspace_id` and
-`current_tab_id`, and may only be compared to the matching ID field. In a
-saved-machine client, the selected server's view applies to the combined agent
-list. Current workspace and tab context includes that selected machine, so an
-identical ID on another machine does not match; independent filter branches,
-such as `status` being `blocked`, still match agents on any connected machine.
+`current_tab_id`, and may only be compared to the matching ID field.
 Effective status values are `idle`, `working`, `blocked`, `done`, and `unknown`;
 `done` means idle and not yet seen.
 
@@ -942,16 +938,12 @@ Errors look like this:
 
 ## Protocol stability
 
-The client-rendered Herdr UI uses a stable endpoint generation for local and SSH
-servers. Client and server builds do not need to match. During connection setup,
-they agree on the core snapshot, screen, input, and blob codecs, and the server advertises
-the API methods and optional capabilities it supports. Saved SSH federation requires the
-`surface_interest` capability so only the selected machine streams a pane surface and the
-`health_check` capability so a quiet broken connection cannot remain Online indefinitely. A server
-without this lifecycle support stays at Attention until it is explicitly updated. Other missing methods disable
-only those actions and show a client-local notice; they do not disconnect the UI. Rejected
-or timed-out actions are also reported without ending the connection. Servers
-from before endpoint generation 1 need one final update.
+The client-rendered Herdr UI connects to a local server using a stable endpoint
+generation. Client and server builds do not need to match. During connection setup,
+they agree on snapshot, screen, input, and blob codecs, and the server advertises
+supported API methods and optional capabilities. Missing methods disable only
+the corresponding actions. Rejections and timeouts show a notice without ending
+the connection. Servers from before endpoint generation 1 need one final update.
 
 The numbered binary protocol remains for same-install and internal operations,
 including direct terminal attach and live handoff. Check `ping` or `herdr status`

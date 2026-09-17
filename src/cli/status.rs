@@ -34,12 +34,16 @@ fn parse_status_args(args: &[String]) -> Option<(StatusScope, bool)> {
     match args.first().map(|arg| arg.as_str()) {
         None => Some((StatusScope::Full, false)),
         Some("--json") if args.len() == 1 => Some((StatusScope::Full, true)),
-        Some("server") => {
-            parse_status_scope_args(args, StatusScope::Server, "herdr status server [--json]")
-        }
-        Some("client") => {
-            parse_status_scope_args(args, StatusScope::Client, "herdr status client [--json]")
-        }
+        Some("server") => parse_status_scope_args(
+            args,
+            StatusScope::Server,
+            "herdr-dumb status server [--json]",
+        ),
+        Some("client") => parse_status_scope_args(
+            args,
+            StatusScope::Client,
+            "herdr-dumb status client [--json]",
+        ),
         Some("help" | "--help" | "-h") => {
             if args.len() > 1 {
                 print_status_help();
@@ -93,10 +97,7 @@ fn print_full_status(json: bool) -> std::io::Result<i32> {
 
     println!("client:");
     println!("  version: {}", crate::build_info::version());
-    println!(
-        "  channel: {}",
-        crate::config::Config::load().config.update.channel.as_str()
-    );
+    println!("  channel: {}", "disabled");
     println!("  protocol: {}", crate::protocol::PROTOCOL_VERSION);
     println!(
         "  endpoint_protocol_generation: {}",
@@ -133,10 +134,7 @@ fn print_client_status(json: bool) -> std::io::Result<()> {
     }
 
     println!("version: {}", crate::build_info::version());
-    println!(
-        "channel: {}",
-        crate::config::Config::load().config.update.channel.as_str()
-    );
+    println!("channel: {}", "disabled");
     println!("protocol: {}", crate::protocol::PROTOCOL_VERSION);
     println!(
         "endpoint_protocol_generation: {}",
@@ -180,9 +178,6 @@ fn read_server_runtime_status() -> std::io::Result<ServerRuntimeStatus> {
             protocol: status.protocol,
             capabilities: status.capabilities,
         }),
-        Err(err) if super::target::is_remote() => Err(super::target::remote_error(
-            super::api_client_error_to_io(err),
-        )),
         Err(ApiClientError::Io(err)) if super::server_not_running_error(&err) => {
             Ok(ServerRuntimeStatus::NotRunning)
         }
@@ -291,7 +286,7 @@ struct UpdateStatusJson {
 fn client_status_json() -> ClientStatusJson {
     ClientStatusJson {
         version: crate::build_info::version(),
-        channel: crate::config::Config::load().config.update.channel.as_str(),
+        channel: "disabled",
         protocol: crate::protocol::PROTOCOL_VERSION,
         endpoint_protocol_generation: crate::protocol::endpoint::ENDPOINT_PROTOCOL_GENERATION,
         endpoint_capabilities: vec![
@@ -299,15 +294,15 @@ fn client_status_json() -> ClientStatusJson {
             crate::protocol::endpoint::PRESENTATION_EFFECTS_FENCE_CAPABILITY,
             crate::protocol::endpoint::HEALTH_CHECK_CAPABILITY,
         ],
-        remote_host_bridge: true,
-        remote_bridge_idle_timeout: crate::platform::REMOTE_BRIDGE_IDLE_TIMEOUT_SUPPORTED,
+        remote_host_bridge: false,
+        remote_bridge_idle_timeout: false,
         binary: current_exe_label(),
         session: crate::session::active_name(),
     }
 }
 
 fn server_status_json(server: &ServerRuntimeStatus) -> ServerStatusJson {
-    let mut status = match server {
+    let status = match server {
         ServerRuntimeStatus::Running {
             version,
             protocol,
@@ -351,11 +346,6 @@ fn server_status_json(server: &ServerRuntimeStatus) -> ServerStatusJson {
             server_binary_stale: Some(false),
         },
     };
-    if let Some((_, session)) = super::target::remote_identity() {
-        status.socket = super::target::socket_label();
-        status.session = Some(session);
-        status.server_binary_stale = None;
-    }
     status
 }
 
@@ -399,10 +389,10 @@ fn current_exe_label() -> String {
 }
 
 fn print_status_help() {
-    eprintln!("herdr status commands:");
-    eprintln!("  herdr status [--json]         show local client and running server status");
-    eprintln!("  herdr status server [--json]  show running server status");
-    eprintln!("  herdr status client [--json]  show local client binary status");
+    eprintln!("herdr-dumb status commands:");
+    eprintln!("  herdr-dumb status [--json]         show local client and running server status");
+    eprintln!("  herdr-dumb status server [--json]  show running server status");
+    eprintln!("  herdr-dumb status client [--json]  show local client binary status");
 }
 
 #[cfg(test)]

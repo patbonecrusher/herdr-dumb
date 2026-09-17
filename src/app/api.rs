@@ -294,6 +294,7 @@ impl App {
             None
         };
 
+        #[cfg(test)]
         let update_ready = if let AppEvent::UpdateReady {
             version,
             install_command,
@@ -303,6 +304,7 @@ impl App {
         } else {
             None
         };
+        #[cfg(test)]
         let manifest_update_agents =
             if let AppEvent::AgentDetectionManifestsUpdated { activated, .. } = &ev {
                 Some(activated.clone())
@@ -312,12 +314,14 @@ impl App {
         let terminal_cwd_reported = matches!(ev, AppEvent::TerminalCwdReported { .. });
         let previous_toast = self.state.toast.clone();
         let mut pane_updates = self.state.handle_app_event(ev);
+        #[cfg(test)]
         if update_ready.is_some() {
             self.state.latest_release_notes = crate::release_notes::load_latest();
         }
         if checkpointed_pane_exit {
             self.finish_checkpointed_pane_exit();
         }
+        #[cfg(test)]
         if let Some(agents) = manifest_update_agents {
             self.reset_agent_detection_for_agents(&agents);
         }
@@ -369,6 +373,7 @@ impl App {
         pane_updates
     }
 
+    #[cfg(test)]
     fn reset_agent_detection_for_agents(&self, agents: &[crate::detect::Agent]) {
         if agents.is_empty() {
             return;

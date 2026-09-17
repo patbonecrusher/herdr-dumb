@@ -38,7 +38,8 @@ pub(crate) enum ClientEndpointFocusTarget {
 }
 
 impl ClientShellState {
-    pub(crate) fn set_endpoint_catalog(&mut self, profiles: &[SavedSshEndpoint]) {
+    #[cfg(test)]
+    pub(crate) fn set_test_endpoints(&mut self, profiles: &[TestEndpoint]) {
         let mut next = Vec::with_capacity(profiles.len().saturating_add(1));
         let local = self
             .endpoints
@@ -48,7 +49,7 @@ impl ClientShellState {
             .unwrap_or_else(local_endpoint);
         next.push(local);
         for profile in profiles {
-            let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
+            let endpoint_id = ClientEndpointId::Test(profile.id.clone());
             let previous = self
                 .endpoints
                 .iter()
@@ -98,6 +99,7 @@ impl ClientShellState {
         self.endpoints = next;
     }
 
+    #[cfg(test)]
     pub(crate) fn select_unavailable_local(&mut self) {
         self.reset_endpoint_projection();
         self.active_endpoint_id = ClientEndpointId::Local;
@@ -107,6 +109,7 @@ impl ClientShellState {
         self.reconcile_input_source();
     }
 
+    #[cfg(test)]
     pub(crate) fn retire_endpoint(&mut self, endpoint_id: &ClientEndpointId) {
         self.retire_endpoint_notifications(endpoint_id);
         if let Some(endpoint) = self
@@ -682,6 +685,7 @@ pub(super) fn endpoint_status_presentation(
         ClientEndpointStatus::Online => ("●", "online", palette.green),
         ClientEndpointStatus::Reconnecting => ("◐", "reconnecting", palette.yellow),
         ClientEndpointStatus::Attention => ("!", "attention", palette.red),
+        #[cfg(test)]
         ClientEndpointStatus::Disabled => ("·", "disabled", palette.overlay0),
     }
 }

@@ -67,7 +67,7 @@ pub(crate) fn protocol_failure_is_fatal(endpoint_id: &ClientEndpointId) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::endpoint::ProfileId;
+    use crate::client::endpoint::TestEndpointId;
 
     #[test]
     fn unknown_optional_controls_are_ignored() {
@@ -146,8 +146,9 @@ mod tests {
 
     #[test]
     fn only_local_protocol_failures_end_the_client() {
-        let remote =
-            ClientEndpointId::Ssh(ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap());
+        let remote = ClientEndpointId::Test(
+            TestEndpointId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+        );
         assert!(protocol_failure_is_fatal(&ClientEndpointId::Local));
         assert!(!protocol_failure_is_fatal(&remote));
     }

@@ -494,7 +494,7 @@ mod tests {
             "current-herdr" => {
                 include_str!("../../tests/fixtures/session/current-herdr-session.json")
             }
-            "current-herdr-dev" => {
+            "current-herdr-dumb-dev" => {
                 include_str!("../../tests/fixtures/session/current-herdr-dev-session.json")
             }
             "legacy-pre-tabs-v2" => {
@@ -735,7 +735,7 @@ mod tests {
 
     #[test]
     fn current_dev_session_fixture_parses_additive_fields() {
-        let snap = parse_snapshot(session_fixture("current-herdr-dev")).unwrap();
+        let snap = parse_snapshot(session_fixture("current-herdr-dumb-dev")).unwrap();
 
         assert_eq!(snap.version, 3);
         assert_eq!(snap.workspaces.len(), 2);

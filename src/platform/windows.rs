@@ -13,7 +13,6 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-mod clipboard_image;
 mod config_backup;
 
 pub(crate) fn windows_virtual_terminal_input_active() -> bool {
@@ -39,25 +38,6 @@ pub(crate) fn classify_child_exit(status: &portable_pty::ExitStatus) -> super::C
     }
 }
 
-pub(crate) struct RemoteBridgeWake;
-
-impl RemoteBridgeWake {
-    pub(crate) fn new() -> std::io::Result<Self> {
-        Ok(Self)
-    }
-
-    pub(crate) fn cancel(&self) -> std::io::Result<()> {
-        // The named-pipe reader checks its cancellation flag between peeks.
-        Ok(())
-    }
-
-    pub(crate) fn wait(&self, _stream: &crate::ipc::LocalStream) -> std::io::Result<()> {
-        // Synchronous named pipes still use peek-before-read polling on Windows.
-        std::thread::sleep(Duration::from_millis(1));
-        Ok(())
-    }
-}
-
 pub(crate) fn wait_client_stream_readable(
     _stream: &crate::ipc::LocalStream,
 ) -> std::io::Result<()> {
@@ -65,57 +45,6 @@ pub(crate) fn wait_client_stream_readable(
     // cancellation flag between polls, including when a frame arrives in several fragments.
     std::thread::sleep(Duration::from_millis(2));
     Ok(())
-}
-
-pub(crate) fn forward_remote_bridge_stdio(
-    stream: crate::ipc::LocalStream,
-    _idle_timeout: bool,
-) -> std::io::Result<()> {
-    use interprocess::TryClone as _;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    let mut stdout = std::io::stdout().lock();
-    let mut socket_to_stdout = stream.try_clone()?;
-    let mut stdin_to_socket = stream;
-    let upload_done = Arc::new(AtomicBool::new(false));
-    let upload_done_worker = Arc::clone(&upload_done);
-    let _upload = std::thread::spawn(move || {
-        let mut stdin = std::io::stdin();
-        let _ = copy_flush(&mut stdin, &mut stdin_to_socket);
-        upload_done_worker.store(true, Ordering::Release);
-    });
-
-    let mut buffer = [0_u8; 16 * 1024];
-    while !upload_done.load(Ordering::Acquire) {
-        match crate::ipc::poll_local_stream_read_count(&mut socket_to_stdout, &mut buffer)? {
-            crate::ipc::LocalStreamReadCount::Data(read) => {
-                std::io::Write::write_all(&mut stdout, &buffer[..read])?;
-                std::io::Write::flush(&mut stdout)?;
-            }
-            crate::ipc::LocalStreamReadCount::Pending => {
-                std::thread::sleep(Duration::from_millis(1));
-            }
-            crate::ipc::LocalStreamReadCount::Closed => break,
-        }
-    }
-    Ok(())
-}
-
-fn copy_flush<R: std::io::Read, W: std::io::Write>(
-    reader: &mut R,
-    writer: &mut W,
-) -> std::io::Result<()> {
-    let mut buffer = [0_u8; 16 * 1024];
-    loop {
-        let read = match reader.read(&mut buffer) {
-            Ok(0) => return Ok(()),
-            Ok(read) => read,
-            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(err) => return Err(err),
-        };
-        writer.write_all(&buffer[..read])?;
-        writer.flush()?;
-    }
 }
 
 pub(super) fn read_terminal_grid_size() -> std::io::Result<(u16, u16)> {
@@ -323,13 +252,9 @@ use windows_sys::{
         },
         Globalization::{CompareStringOrdinal, CSTR_EQUAL, CSTR_GREATER_THAN, CSTR_LESS_THAN},
         Security::SECURITY_ATTRIBUTES,
-        Storage::FileSystem::CreateDirectoryW,
         System::{
             Console::GetConsoleWindow,
-            DataExchange::{
-                CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard,
-                RegisterClipboardFormatW, SetClipboardData,
-            },
+            DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData},
             Diagnostics::{
                 Debug::ReadProcessMemory,
                 ToolHelp::{
@@ -345,10 +270,10 @@ use windows_sys::{
                 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
             },
             Memory::{
-                GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, VirtualQueryEx, GMEM_MOVEABLE,
+                GlobalAlloc, GlobalLock, GlobalUnlock, VirtualQueryEx, GMEM_MOVEABLE,
                 MEMORY_BASIC_INFORMATION,
             },
-            Ole::{CF_DIB, CF_DIBV5, CF_UNICODETEXT},
+            Ole::CF_UNICODETEXT,
             Threading::{
                 GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, IsWow64Process2,
                 OpenProcess, OpenThread, QueryFullProcessImageNameW, ResumeThread,
@@ -377,7 +302,7 @@ use windows_sys::{
     },
 };
 
-use super::{ClipboardImage, ForegroundJob, Signal};
+use super::{ForegroundJob, Signal};
 
 const STILL_ACTIVE: u32 = 259;
 const FOREGROUND_PROCESS_SNAPSHOT_CACHE_TTL: Duration = Duration::from_millis(250);
@@ -541,67 +466,6 @@ static PROCESS_RUNTIME_MARKER_CACHE: LazyLock<Mutex<HashMap<u32, CachedProcessRu
 static GIT_BASH_PROCESS_CACHE: LazyLock<Mutex<HashMap<u32, CachedGitBashProcess>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-pub(crate) fn remote_ssh_config_paths() -> super::RemoteSshConfigPaths {
-    super::RemoteSshConfigPaths {
-        user_config: std::env::var_os("USERPROFILE")
-            .map(PathBuf::from)
-            .map(|home| home.join(".ssh").join("config")),
-        system_config: std::env::var_os("PROGRAMDATA")
-            .map(PathBuf::from)
-            .map(|dir| dir.join("ssh").join("ssh_config")),
-        multiplexing: false,
-    }
-}
-
-pub(crate) fn create_remote_ssh_config_dir(_control_socket_name: &str) -> std::io::Result<PathBuf> {
-    let base = remote_private_temp_base();
-    std::fs::create_dir_all(&base)?;
-    for attempt in 0..100 {
-        let dir = base.join(format!("ssh-{}-{attempt}", std::process::id()));
-        match create_remote_private_dir(&dir) {
-            Ok(()) => return Ok(dir),
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => return Err(err),
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::AlreadyExists,
-        "failed to create private herdr ssh config directory",
-    ))
-}
-
-pub(crate) fn create_remote_ssh_config_file(
-    path: &std::path::Path,
-) -> std::io::Result<std::fs::File> {
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-}
-
-pub(crate) fn create_remote_private_dir(path: &std::path::Path) -> std::io::Result<()> {
-    use interprocess::os::windows::security_descriptor::{
-        AsSecurityDescriptorExt as _, SecurityDescriptor,
-    };
-    use widestring::U16CString;
-
-    let sddl = U16CString::from_str("D:P(A;OICI;GA;;;SY)(A;OICI;GA;;;OW)")
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidInput, err))?;
-    let security_descriptor = SecurityDescriptor::deserialize(&sddl)?;
-    let mut security_attributes = SECURITY_ATTRIBUTES {
-        nLength: u32::try_from(size_of::<SECURITY_ATTRIBUTES>()).unwrap_or(u32::MAX),
-        lpSecurityDescriptor: null_mut(),
-        bInheritHandle: 0,
-    };
-    security_descriptor.write_to_security_attributes(&mut security_attributes);
-    let path = extended_length_path(path)?;
-    if unsafe { CreateDirectoryW(path.as_ptr(), &security_attributes) } != 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
-    }
-}
-
 fn extended_length_path(path: &std::path::Path) -> std::io::Result<Vec<u16>> {
     use std::os::windows::ffi::OsStrExt as _;
 
@@ -621,29 +485,6 @@ fn extended_length_path(path: &std::path::Path) -> std::io::Result<Vec<u16>> {
     };
     extended.push(0);
     Ok(extended)
-}
-
-pub(crate) fn remote_private_temp_base() -> PathBuf {
-    crate::config::state_dir().join("remote")
-}
-
-pub(crate) fn remote_bridge_endpoint_path(_readable_name: &str, short_name: &str) -> PathBuf {
-    remote_private_temp_base().join(short_name)
-}
-
-pub(crate) fn remote_reattach_program(program: &str) -> String {
-    let path = std::env::current_exe()
-        .ok()
-        .filter(|path| path.is_absolute())
-        .unwrap_or_else(|| PathBuf::from(program));
-    format!(
-        "& {}",
-        remote_reattach_argument(&path.display().to_string())
-    )
-}
-
-pub(crate) fn remote_reattach_argument(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
 }
 
 /// Encode native or targeted semantic Win32 input for a compatible ConPTY destination.
@@ -2329,76 +2170,6 @@ pub fn open_url(url: &str) -> std::io::Result<Option<std::process::Child>> {
     }
 }
 
-pub fn read_clipboard_image() -> Option<ClipboardImage> {
-    for attempt in 0..10 {
-        if unsafe { OpenClipboard(null_mut()) } != 0 {
-            let _clipboard = ClipboardGuard;
-            if let Some(bytes) = read_registered_png_clipboard() {
-                return Some(ClipboardImage {
-                    bytes,
-                    extension: "png",
-                });
-            }
-            for format in [CF_DIBV5 as u32, CF_DIB as u32] {
-                if let Some(bytes) =
-                    clipboard_global_bytes(format, clipboard_image::MAX_CLIPBOARD_ALLOCATION)
-                {
-                    if let Some(bytes) = clipboard_image::dib_to_png(&bytes) {
-                        return Some(ClipboardImage {
-                            bytes,
-                            extension: "png",
-                        });
-                    }
-                }
-            }
-            return None;
-        }
-        if attempt < 9 {
-            std::thread::sleep(Duration::from_millis(5));
-        }
-    }
-    None
-}
-
-fn read_registered_png_clipboard() -> Option<Vec<u8>> {
-    static PNG_FORMAT: LazyLock<u32> = LazyLock::new(|| {
-        let name = wide_null("PNG");
-        unsafe { RegisterClipboardFormatW(name.as_ptr()) }
-    });
-    if *PNG_FORMAT == 0 {
-        return None;
-    }
-    let bytes = clipboard_global_bytes(
-        *PNG_FORMAT,
-        crate::protocol::MAX_CLIPBOARD_IMAGE_PAYLOAD + 64 * 1024,
-    )?;
-    clipboard_image::validated_png(&bytes)
-}
-
-fn clipboard_global_bytes(format: u32, max_bytes: usize) -> Option<Vec<u8>> {
-    let handle = unsafe { GetClipboardData(format) };
-    if handle.is_null() {
-        return None;
-    }
-    let data = unsafe { GlobalLock(handle) };
-    if data.is_null() {
-        return None;
-    }
-    let size = unsafe { GlobalSize(handle) };
-    if size == 0 || size > max_bytes {
-        unsafe {
-            GlobalUnlock(handle);
-        }
-        return None;
-    }
-    let mut bytes = vec![0_u8; size];
-    unsafe {
-        copy_nonoverlapping(data.cast::<u8>(), bytes.as_mut_ptr(), size);
-        GlobalUnlock(handle);
-    }
-    Some(bytes)
-}
-
 pub fn show_desktop_notification(title: &str, body: Option<&str>) -> std::io::Result<bool> {
     let title = title.to_owned();
     let body = body.unwrap_or(&title).to_owned();
@@ -3011,21 +2782,6 @@ mod tests {
             super::prepare_paste_text_for_pty_platform("one\ntwo\r\nthree\rfour".to_owned()),
             "one\r\ntwo\r\nthree\rfour"
         );
-    }
-
-    #[test]
-    fn private_remote_directory_supports_long_paths() {
-        let base = std::env::temp_dir().join(format!(
-            "herdr-private-remote-dir-test-{}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&base).expect("create test base");
-        let private = base.join("x".repeat(240));
-
-        super::create_remote_private_dir(&private).expect("create private long-path directory");
-        fs::write(private.join("probe"), b"ok").expect("write inherited private file");
-
-        fs::remove_dir_all(base).expect("remove test directory");
     }
 
     #[test]

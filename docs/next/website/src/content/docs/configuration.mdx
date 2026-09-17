@@ -12,22 +12,22 @@ The [Config reference](/docs/config-reference/) lists every setting and keybindi
 Herdr reads config from:
 
 ```text
-Linux and macOS: ~/.config/herdr/config.toml
+Linux and macOS: ~/.config/herdr-dumb/config.toml
 Windows:          %APPDATA%\herdr\config.toml
 ```
 
-Run `herdr --help` to see the resolved config path for your system.
+Run `herdr-dumb --help` to see the resolved config path for your system.
 
 Print the full default config:
 
 ```bash
-herdr --default-config
+herdr-dumb --default-config
 ```
 
 Save it as your config if you want a complete starting point:
 
 ```bash
-herdr --default-config > ~/.config/herdr/config.toml
+herdr-dumb --default-config > ~/.config/herdr-dumb/config.toml
 ```
 
 If a config value is invalid, Herdr falls back to a safe default and shows a startup warning.
@@ -43,14 +43,14 @@ onboarding = false
 Reload a running server after editing `config.toml`:
 
 ```bash
-herdr server reload-config
+herdr-dumb server reload-config
 ```
 
 You can also open the global menu in Herdr and choose `reload config`.
 
 Reload applies most UI settings without restarting panes. Startup-only settings still need a restart.
 
-Themes, sidebar layouts, copy behavior, and other presentation settings come from the client's local config, including when viewing an SSH machine. Pane defaults, worktrees, integrations, and custom commands belong to the server where the panes run. The UI's `reload config` action reloads both the client's local settings and the selected server's config. Local keybindings reload too; `--remote-keybindings server` instead uses the selected server's keybindings.
+Themes, sidebar layout, and copy behavior use the local client's config. Pane defaults, integrations, and custom commands use the local server's config. The UI's `reload config` action reloads both.
 
 ## Headless terminal size
 
@@ -110,17 +110,6 @@ Grouped worktrees still behave like normal Herdr workspaces: they can be focused
 
 To delete a worktree checkout, use `Delete worktree checkout...` on a grouped child workspace. Herdr runs `git worktree remove`, first asking Git to remove safely. If Git refuses because the checkout has modified or untracked files, Herdr asks again before running the forced remove. Branches are not deleted.
 
-## Remote attach
-
-Remote attach manages its SSH connection with temporary keepalives and, where supported, connection reuse by default.
-
-```toml
-[remote]
-manage_ssh_config = true
-```
-
-When enabled, `herdr --remote` writes a private temporary SSH config that includes your user and system SSH configs first, then adds fallback `ServerAliveInterval` and `ServerAliveCountMax` values. Your own keepalive settings win. Linux and macOS clients also use a private per-attach OpenSSH control socket to reuse the first authenticated connection; Windows OpenSSH does not. Set `manage_ssh_config = false` to run remote attach through plain `ssh` without Herdr's generated config or control socket.
-
 ## Keybindings
 
 For a guided introduction to the prefix and a vetted prefix-free setup, see [Keyboard](/docs/keyboard/).
@@ -163,7 +152,7 @@ resize_pane_right = "ctrl+shift+alt+right"
 
 Key strings accept plain keys, modifier combinations such as `ctrl+a`, `shift+n`, `alt+1`, `cmd+k`, and special keys such as `enter`, `tab`, `esc`, `left`, `right`, `up`, and `down`. Named punctuation such as `minus`, `comma`, `ampersand`, `plus`, and `backtick` is also accepted. Plain direct printable keys such as `n` are unsafe because they intercept typing; use `prefix+n` unless you intentionally want a direct binding. The `navigate_workspace_*` and `navigate_pane_*` fields are navigate-mode-only and may use plain keys such as `j` or `k`; they must not use `prefix+`, `esc`, `enter`, `tab`, `shift+tab`, `left`, `right`, or unmodified `1` through `9`. Left and right arrows are permanent aliases for pane-left and pane-right navigation. These navigate-mode shortcuts are independent from general action bindings such as `focus_pane_down = "prefix+j"`; when both use the same key, the navigate-mode shortcut wins while navigate mode is open. Alt, Cmd/Super, and punctuation with modifiers depend on your terminal and tmux settings.
 
-If you have old custom keybindings and want the new defaults, run `herdr config reset-keys`. Herdr backs up `config.toml`, removes `[keys]` and `[[keys.command]]`, and uses built-in v2 defaults after restart or `herdr server reload-config`.
+If you have old custom keybindings and want the new defaults, run `herdr-dumb config reset-keys`. Herdr backs up `config.toml`, removes `[keys]` and `[[keys.command]]`, and uses built-in v2 defaults after restart or `herdr-dumb server reload-config`.
 
 ## Indexed jumps
 
@@ -313,12 +302,10 @@ tab_bar_right = [
   { type = "hostname" },
   { type = "datetime", format = "%H:%M" },
   { type = "text", text = "prod" },
-  { type = "command", command = "~/.config/herdr/status.sh", interval_seconds = 5, timeout_seconds = 2 },
+  { type = "command", command = "~/.config/herdr-dumb/status.sh", interval_seconds = 5, timeout_seconds = 2 },
 ]
 tab_bar_right_separator = " · "
 ```
-
-The status area is empty by default. Add `zoom` to show a fixed `ZOOM` pill while the active tab is zoomed; the existing per-tab `Z` markers remain independent. `hostname`, `datetime`, and `command` resolve on the Herdr server, so `herdr --remote` shows the remote machine's values. Datetime entries use `strftime` formatting; directives that require a UTC offset or Unix timestamp, such as `%z` and `%s`, are rejected because the value is server-local wall-clock time.
 
 Command entries run immediately and then at `interval_seconds` without blocking rendering or overlapping a previous run. The interval can be 1–31,536,000 seconds and the timeout can be 1–3,600 seconds. Herdr uses the last line of successful output, removes ESC-prefixed terminal control sequences instead of interpreting styles, clears the entry after failure, empty output, or `timeout_seconds`, and provides the same active workspace, tab, pane, socket, binary, and working-directory context as custom command keybindings. Commands are supported on Linux, macOS, and Windows, using `/bin/sh -lc` on Linux and macOS and `cmd.exe /d /c` on Windows.
 
@@ -334,8 +321,6 @@ window_title = "{hostname}: {workspace}"
 ```
 
 Tokens are `{hostname}`, `{workspace}`, `{tab}`, `{pane}` (the focused pane's manual name), and `{terminal_title}` (the focused pane's own terminal title with spinner frames stripped). Write `{{` and `}}` for literal braces. A token with no value renders empty.
-
-The title renders on the Herdr server, so `{hostname}` names the machine the panes run on, including when you attach with `herdr --remote` or run `herdr` over SSH. Set `window_title = ""` to leave the outer terminal title alone.
 
 `client.window_title.set` overrides the configured title until `client.window_title.clear` hands it back.
 
@@ -372,7 +357,7 @@ Agent rows accept these built-in tokens:
 
 - `state_icon` — colored icon for the agent's semantic state.
 - `state_text` — `idle`, `working`, `blocked`, `done`, or `unknown`, including a reported display label when present.
-- `machine` — machine label when the client has multiple machines; omitted for a single local machine.
+- `machine` — legacy compatibility token; omitted in local-only sessions.
 - `workspace` — workspace name.
 - `tab` — tab name when available.
 - `pane` — pane name when available.
@@ -390,7 +375,7 @@ Space rows accept these built-in tokens:
 - `git_status` — Git ahead and behind counts when nonzero.
 - `$name` — custom workspace metadata named `name`.
 
-Tokens render in their configured order. Herdr normally separates adjacent values with ` · ` and uses a single space after `state_icon`. Missing values and their separators disappear; a row disappears when none of its tokens have a value. Existing custom rows remain unchanged, so add `machine` explicitly if you want machine identity in a custom multi-machine layout. Each layout may contain at most 16 rows, with at most 16 tokens in each row.
+Tokens render in their configured order. Herdr normally separates adjacent values with ` · ` and uses a single space after `state_icon`. Missing values and their separators disappear; a row disappears when none of its tokens have a value. Existing custom rows remain unchanged. Each layout may contain at most 16 rows, with at most 16 tokens in each row.
 
 A token entry can also be an inline style table:
 
@@ -410,12 +395,12 @@ Text-valued tokens also accept up to 16 ordered `rules`. Each rule contains exac
 [ui.sidebar.agents]
 rows = [
   ["state_icon", "workspace", "tab"],
-  [{ token = "machine", fg = "#fff", rules = [{ equals = "Local", fg = "#f55" }, { equals = "Fedora", ignore_case = true, fg = "#51a2da" }] }, "agent"],
+  [{ token = "workspace", fg = "#fff", rules = [{ equals = "main", fg = "#f55" }, { equals = "build", ignore_case = true, fg = "#51a2da" }] }, "agent"],
   [{ token = "$load", fg = "#fff", rules = [{ gt = 80, fg = "#f55", bold = true }, { gt = 50, fg = "#fc0" }] }],
 ]
 ```
 
-The first matching rule wins. Its specified style fields override the occurrence's defaults; unspecified fields inherit them. If no rule matches, the defaults remain. Matching uses the full token value before display truncation. Set `hide = true` on a rule to remove the matching token and its separator; rows with no remaining tokens also disappear. For example, `{ token = "machine", fg = "#61afef", rules = [{ equals = "Local", hide = true }] }` hides the machine token when its label is exactly `Local`. This compares the label, not the connection type. With `hide = false` or omitted, the token stays visible. A rule with no overrides still stops matching and keeps the defaults.
+The first matching rule wins. Its specified style fields override the occurrence's defaults; unspecified fields inherit them. If no rule matches, the defaults remain. Matching uses the full token value before display truncation. Set `hide = true` on a rule to remove the matching token and its separator; rows with no remaining tokens also disappear. For example, `{ token = "workspace", fg = "#61afef", rules = [{ equals = "main", hide = true }] }` hides the workspace token when its name is exactly `main`. With `hide = false` or omitted, the token stays visible. A rule with no overrides still stops matching and keeps the defaults.
 
 `equals`, `contains`, and `starts_with` take strings and are case-sensitive. Add `ignore_case = true` for ASCII case-insensitive matching; non-ASCII characters remain case-sensitive. Empty strings follow ordinary string matching: empty `equals` matches only an empty value, while empty `contains` or `starts_with` matches any present value.
 
@@ -523,7 +508,7 @@ kitty_graphics = false
 
 The legacy `experimental.kitty_graphics` setting remains accepted for existing configurations. `terminal.kitty_graphics` takes precedence when both are set.
 
-Changing this setting requires restarting the affected Herdr server or reattaching the client. In remote sessions, the server's setting controls pane graphics parsing and API availability, while the local client's setting controls output to the outer terminal.
+Changing this setting requires restarting the affected Herdr server or reattaching the client.
 
 ## Agent session restore
 
@@ -581,9 +566,9 @@ Logs are useful when diagnosing startup warnings, integration state, or socket A
 Common log files:
 
 ```text
-~/.config/herdr/herdr.log
-~/.config/herdr/herdr-client.log
-~/.config/herdr/herdr-server.log
+~/.config/herdr-dumb/herdr.log
+~/.config/herdr-dumb/herdr-client.log
+~/.config/herdr-dumb/herdr-server.log
 ```
 
 Logs rotate automatically. Include the current log and rotated siblings when reporting issues.

@@ -126,12 +126,13 @@ pub enum AppEvent {
         known_agent: Option<Agent>,
         seq: Option<u64>,
     },
-    /// A new version is available through the active installation manager.
+    // Synthetic update events preserve coverage of frozen notification/snapshot contracts.
+    #[cfg(test)]
     UpdateReady {
         version: String,
         install_command: String,
     },
-    /// Remote agent detection manifest update check finished.
+    #[cfg(test)]
     AgentDetectionManifestsUpdated {
         updated: Vec<crate::detect::manifest_update::ManifestUpdateCommit>,
         activated: Vec<crate::detect::Agent>,

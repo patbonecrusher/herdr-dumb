@@ -26,7 +26,7 @@ pub use self::{
         ConfigReloadStatus, HostCursorModeConfig, NewTerminalCwdConfig, PaneBordersConfig,
         ShellModeConfig, SidebarCollapsedModeConfig, StatusIndicatorStyle, TabBarPositionConfig,
         ToastClipboardPosition, ToastConfig, ToastDelivery, ToastHerdrPosition,
-        UpdateChannelConfig, MAX_TOAST_DELAY_SECONDS,
+        MAX_TOAST_DELAY_SECONDS,
     },
     sidebar::{
         AgentSidebarToken, AgentsSidebarConfig, SidebarConfig, SidebarTokenStyle,
@@ -116,7 +116,6 @@ impl Config {
         prefix_diag
             .into_iter()
             .chain(keybind_diags)
-            .chain(self.remote_image_paste_key().err())
             .chain(self.theme.diagnostics())
             .chain(self.ui.sound.diagnostics())
             .chain(tab_bar_right_diagnostics(&self.ui.tab_bar_right))
@@ -154,16 +153,6 @@ impl Config {
             })
     }
 
-    pub(crate) fn remote_image_paste_key(&self) -> Result<Option<(KeyCode, KeyModifiers)>, String> {
-        let raw = self.keys.remote_image_paste.trim();
-        if raw.is_empty() {
-            return Ok(None);
-        }
-        parse_key_combo(raw).map(Some).ok_or_else(|| {
-            format!("invalid keybinding: keys.remote_image_paste = {raw:?}; disabling binding")
-        })
-    }
-
     pub(crate) fn live_keybinds_with_diagnostics(
         &self,
     ) -> Result<(LiveKeybindConfig, Vec<String>), Vec<String>> {
@@ -198,6 +187,26 @@ pub(crate) fn keybindings_from_profile_toml(profile: &str) -> Result<LiveKeybind
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fork_uses_separate_state_and_config_namespace() {
+        assert_eq!(
+            super::app_dir_name(),
+            if cfg!(debug_assertions) {
+                "herdr-dumb-dev"
+            } else {
+                "herdr-dumb"
+            }
+        );
+    }
+
+    #[test]
+    fn obsolete_remote_settings_do_not_prevent_local_config_loading() {
+        let config: super::Config = toml::from_str(
+            "[remote]\nmanage_ssh_config = false\n[keys]\nremote_image_paste = 'ctrl+v'\n",
+        )
+        .expect("obsolete settings are ignored");
+        assert!(config.live_keybinds_with_diagnostics().is_ok());
+    }
     use super::*;
 
     #[test]
@@ -380,21 +389,6 @@ command = "echo one"
         assert!(switch_tab_labels
             .iter()
             .all(|label| label.starts_with("prefix+")));
-    }
-
-    #[test]
-    fn remote_image_paste_key_defaults_to_ctrl_v() {
-        let config = Config::default();
-        assert_eq!(
-            config.remote_image_paste_key().unwrap(),
-            Some((KeyCode::Char('v'), KeyModifiers::CONTROL))
-        );
-    }
-
-    #[test]
-    fn remote_image_paste_key_can_be_disabled() {
-        let config: Config = toml::from_str("[keys]\nremote_image_paste = ''\n").unwrap();
-        assert_eq!(config.remote_image_paste_key().unwrap(), None);
     }
 
     #[test]

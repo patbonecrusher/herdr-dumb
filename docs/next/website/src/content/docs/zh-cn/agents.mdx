@@ -54,7 +54,7 @@ Herdr 首先检测每个窗格的前台进程。之后,每个窗格有且只有�
 
 在 Linux 和 macOS 上,宿主可见的包装器可能会向 Herdr 隐藏真实的智能体进程。在包装器命令上设置 `HERDR_AGENT=<agent>`,告诉 Herdr 应使用哪个已有智能体的屏幕清单。例如,在 Linux 上运行 `HERDR_AGENT=claude fence -- claude`,或在 macOS 上运行 `HERDR_AGENT=claude nono run --profile claude-code -- claude`。这个提示的作用范围只限于该前台进程;仅在 VM 或容器内部设置时 Herdr 无法看到它,而且除非所有继承的前台进程都应被视为该智能体,否则不要全局 export。
 
-某些受限的 Linux 运行环境不会公开终端前台进程组。原生检测不可用时,以 `HERDR_PROCESS_DETECTION=child-groups` 启动 Herdr 服务器,即可选择启用直接子进程组推断。原生检测仍然优先,默认的 `native` 模式不会执行此推断。这个选择加入模式属于尽力而为,较新的后台任务可能会被误判为前台任务。该变量由服务器读取且需要重启;请在远程服务器环境中设置,而不是在连接客户端上设置。
+某些受限的 Linux 运行环境不会公开终端前台进程组。原生检测不可用时,以 `HERDR_PROCESS_DETECTION=child-groups` 启动 Herdr 服务器,即可选择启用直接子进程组推断。原生检测仍然优先,默认的 `native` 模式不会执行此推断。这个选择加入模式属于尽力而为,较新的后台任务可能会被误判为前台任务。该变量由服务器读取且需要重启;请在服务器环境中设置,而不是在连接客户端上设置。
 
 ## blocked 状态
 
@@ -64,25 +64,25 @@ Herdr 首先检测每个窗格的前台进程。之后,每个窗格有且只有�
 
 ## 检测清单
 
-内置清单打包在 Herdr 内部。Herdr 还会向 herdr.dev 检查远程清单更新,并自动应用有效的按智能体规则更新,不需要重启 Herdr。远程清单存放在 Herdr 的状态目录中。设置 `[update] manifest_check = false` 可以禁用后台远程清单检查。
+没有更新器、发布通道切换或检测清单下载。需要更换版本时，请手动构建并替换可执行文件。内置检测规则和本地覆盖仍然可用。
 
 本地覆盖可以从平台配置目录替换远程或内置清单:
 
 ```text
-~/.config/herdr/agent-detection/<agent>.toml
+~/.config/herdr-dumb/agent-detection/<agent>.toml
 ```
 
-本地覆盖始终优先。没有本地覆盖时,Herdr 在缓存的远程清单和运行中二进制文件内置的清单之间,选择更新且兼容的那个。在调试构建上,同一个配置助手可能使用 `herdr-dev` 之类的开发目录。无效的覆盖文件会被忽略并给出警告,Herdr 会对该智能体回退到缓存的远程或内置清单。
+本地覆盖始终优先。没有本地覆盖时,Herdr 在缓存的远程清单和运行中二进制文件内置的清单之间,选择更新且兼容的那个。在调试构建上,同一个配置助手可能使用 `herdr-dumb-dev` 之类的开发目录。无效的覆盖文件会被忽略并给出警告,Herdr 会对该智能体回退到缓存的远程或内置清单。
 
 远程清单只为 Herdr 已经知道如何识别的智能体修补检测规则。添加全新的智能体仍然需要更新 Herdr 二进制文件,以获得进程检测、标签和集成行为。
 
-运行中的服务器在启动时把生效的清单加载进内存。自动的远程清单更新会在写入新规则后重新加载该内存缓存。运行 `herdr server update-agent-manifests` 可以立即拉取远程清单更新并重载运行中的服务器。手动编辑本地覆盖后,重启 Herdr 或运行 `herdr server reload-agent-manifests` 把文件应用到运行中的服务器。
+没有更新器、发布通道切换或检测清单下载。需要更换版本时，请手动构建并替换可执行文件。内置检测规则和本地覆盖仍然可用。
 
-当某个窗格显示了错误状态时,用 `herdr agent explain`:
+当某个窗格显示了错误状态时,用 `herdr-dumb agent explain`:
 
 ```bash
-herdr agent explain <target>
-herdr agent explain --file screen.txt --agent codex --json
+herdr-dumb agent explain <target>
+herdr-dumb agent explain --file screen.txt --agent codex --json
 ```
 
 实时 explain 由运行中的服务器评估,因此反映的是生效的清单缓存。explain 输出包括: 智能体、最终状态、屏幕检测是否被完整生命周期权威跳过、清单来源和版本、缓存的远程版本、本地覆盖的遮蔽情况、远程更新状态、匹配的规则、可见证据标志、已评估规则的匹配器和区域证据、转写查看器的跳过更新原因,以及没有规则匹配时的 idle 回退原因。
@@ -102,8 +102,8 @@ Herdr 可以在 tmux 作为外层终端环境时运行。智能体检测不会�
 为你使用的每个智能体安装集成;它让 Herdr 获得钩子或插件上报,而不是只靠屏幕检测:
 
 ```bash
-herdr integration install claude
-herdr integration status
+herdr-dumb integration install claude
+herdr-dumb integration status
 ```
 
 每个受支持的智能体都有自己的集成名称和行为。按智能体的细节和完整安装列表见[集成](/zh-cn/docs/integrations/)。如果你正在构建智能体,[自定义集成指南](/zh-cn/docs/integrations/#集成你自己的智能体)介绍了如何在不为 Herdr 添加原生支持的情况下上报生命周期状态。
@@ -113,8 +113,8 @@ herdr integration status
 你可以重命名智能体目标的显示名:
 
 ```bash
-herdr agent rename w1:p1 reviewer
-herdr agent rename reviewer --clear
+herdr-dumb agent rename w1:p1 reviewer
+herdr-dumb agent rename reviewer --clear
 ```
 
 目标使用唯一的实时智能体名称,或当前承载该智能体的窗格 ID。终端 ID 和单独的智能体 kind 标签不能作为目标。
@@ -124,12 +124,12 @@ herdr agent rename reviewer --clear
 集成只把生命周期状态作为语义状态上报。展示自定义应通过窗格元数据令牌单独添加。
 
 ```bash
-herdr pane report-agent w1:p1 \
+herdr-dumb pane report-agent w1:p1 \
   --source custom:indexer \
   --agent docs-bot \
   --state working
 
-herdr pane report-metadata w1:p1 \
+herdr-dumb pane report-metadata w1:p1 \
   --source custom:indexer-display \
   --token summary=indexing
 ```
@@ -143,7 +143,7 @@ herdr pane report-metadata w1:p1 \
 把当前终端附加到某一个智能体终端,而不是完整的 Herdr UI:
 
 ```bash
-herdr agent attach reviewer
+herdr-dumb agent attach reviewer
 ```
 
 用 `ctrl+b q` 分离。用 `ctrl+b ctrl+b` 发送字面的 `ctrl+b`。
@@ -153,7 +153,7 @@ herdr agent attach reviewer
 如果另一个直接附加客户端已经拥有输入,用 `--takeover`:
 
 ```bash
-herdr agent attach reviewer --takeover
+herdr-dumb agent attach reviewer --takeover
 ```
 
-想对非智能体终端获得相同的直接附加行为时,用 `herdr terminal attach <terminal_id>`。
+想对非智能体终端获得相同的直接附加行为时,用 `herdr-dumb terminal attach <terminal_id>`。
