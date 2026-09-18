@@ -66,6 +66,13 @@ describe("fork build and release boundaries", () => {
     expect(recipe).not.toContain('"{{target}}"');
   });
 
+  test("existing Windows CI uses the renamed Cargo binary", () => {
+    const ci = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+    expect(ci).toContain('target\\debug\\herdr-dumb.exe');
+    expect(ci).toContain('target\\x86_64-pc-windows-msvc\\debug\\herdr-dumb.exe');
+    expect(ci).not.toMatch(/target[^\r\n]*\\herdr\.exe/);
+  });
+
   test("pins every action and does not interpolate event data into shell programs", () => {
     for (const job of Object.values(workflow.jobs) as any[]) {
       for (const step of job.steps) {
