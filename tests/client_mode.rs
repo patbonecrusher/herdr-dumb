@@ -872,7 +872,7 @@ fn obsolete_saved_ssh_profiles_are_ignored_at_launch() {
         );
 
         // Exercise both auto-start and a subsequent attach to the healthy Local server.
-        for args in [&[][..], &["client"][..]] {
+        for (attempt, args) in [&[][..], &["client"][..]].into_iter().enumerate() {
             let client = spawn_client_process_with_args_and_env(
                 &config_home,
                 &runtime_dir,
@@ -884,15 +884,23 @@ fn obsolete_saved_ssh_profiles_are_ignored_at_launch() {
                 spawn_pty_drain(client._master.as_ref().unwrap().try_clone_reader().unwrap());
             wait_for_socket(&api_socket, Duration::from_secs(10));
             let mut input = client._master.as_ref().unwrap().take_writer().unwrap();
-            // Retry input until the local surface is ready. No saved-machine header is rendered.
+            // Socket readiness precedes terminal raw-mode setup. Wait for the
+            // first frame before typing, so startup cannot consume half a command.
+            assert!(
+                wait_until(Duration::from_secs(10), Duration::from_millis(20), || {
+                    read_output(&output).contains("spaces")
+                }),
+                "Local must render before input (remote selected: {select_remote})"
+            );
+            let marker = format!("LOCAL_DIRECT_READY_{attempt}");
+            input
+                .write_all(format!("printf 'LOCAL_%s\\n' DIRECT_READY_{attempt}\r").as_bytes())
+                .unwrap();
+            // A unique marker proves this attach accepted input. Decode the
+            // screen because incremental rendering can split text with ANSI.
             assert!(wait_until(Duration::from_secs(10), Duration::from_millis(20), || {
-                if read_output(&output).contains("LOCAL_DIRECT_READY") {
-                    return true;
-                }
-                input
-                    .write_all(b"printf 'LOCAL_%s\\n' DIRECT_READY\r")
-                    .unwrap();
-                false
+                let bytes = output.lock().unwrap().bytes.clone();
+                terminal_screen::text(&bytes, 80, 24).contains(&marker)
             }), "Local must accept input without waiting for SSH (remote selected: {select_remote}): {}", read_output(&output));
             let text = read_output(&output);
             assert!(!text.contains("Unavailable remote"), "{text}");
@@ -901,6 +909,10 @@ fn obsolete_saved_ssh_profiles_are_ignored_at_launch() {
             drop(input);
             drop(client);
         }
+        assert!(
+            !base.join("ssh-invoked").exists(),
+            "obsolete profiles must never invoke SSH"
+        );
         let _ = send_json_request(
             &api_socket,
             r#"{"id":"stop","method":"server.stop","params":{}}"#,
