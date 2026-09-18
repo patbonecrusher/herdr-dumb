@@ -226,6 +226,7 @@ pub struct ClipboardCommand {
     pub args: &'static [&'static str],
 }
 
+#[cfg(unix)]
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum LimitedRead {
     Empty,
@@ -233,6 +234,7 @@ pub(crate) enum LimitedRead {
     Oversized,
 }
 
+#[cfg(unix)]
 pub(crate) fn read_limited_reader(
     mut reader: impl std::io::Read,
     max_bytes: usize,

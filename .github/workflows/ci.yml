@@ -264,19 +264,22 @@ jobs:
           $ErrorActionPreference = "Stop"
           $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
           $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
+          $executableName = if ($env:GITHUB_REPOSITORY -eq "herdrdev/herdr") { "herdr.exe" } else { "herdr-dumb.exe" }
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           .\scripts\package_windows_conpty.ps1 `
             -HerdrExe target\x86_64-pc-windows-msvc\debug\herdr-dumb.exe `
             -PackagePath $package `
             -StageDir $stage `
+            -ExecutableName $executableName `
             -OutputPath artifacts\herdr-windows-x86_64.zip
           "HERDR_CONPTY_PACKAGE_DIR=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "HERDR_CONPTY_EXECUTABLE=$executableName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Probe enhanced pane input with bundled ConPTY
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $exe = Join-Path $env:HERDR_CONPTY_PACKAGE_DIR "herdr.exe"
+          $exe = Join-Path $env:HERDR_CONPTY_PACKAGE_DIR $env:HERDR_CONPTY_EXECUTABLE
           $consoleHost = Join-Path $env:HERDR_CONPTY_PACKAGE_DIR "conpty\x64\OpenConsole.exe"
           .\scripts\windows_conpty_enhanced_input_probe.ps1 `
             -ExePath $exe `
@@ -284,6 +287,8 @@ jobs:
             -ExpectedConsoleHostPath $consoleHost
 
       - name: Test packaged installer and repair with Windows PowerShell 5.1
+        # The fork has no updater/channel commands and distributes portable archives.
+        if: github.repository == 'herdrdev/herdr'
         shell: pwsh
         run: |
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
@@ -291,4 +296,19 @@ jobs:
             -ArchivePath artifacts\herdr-windows-x86_64.zip
           if ($LASTEXITCODE -ne 0) {
             throw "Windows PowerShell installer test failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Test fork portable archive with Windows PowerShell 5.1
+        if: github.repository != 'herdrdev/herdr'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $extract = Join-Path $env:RUNNER_TEMP "herdr-dumb-archive-smoke"
+          Expand-Archive -LiteralPath artifacts\herdr-windows-x86_64.zip -DestinationPath $extract
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+            .\scripts\windows_smoke_conpty_path.ps1 `
+            -ExePath (Join-Path $extract "herdr-dumb.exe") `
+            -Session "ci-archive-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows PowerShell portable archive test failed with exit code $LASTEXITCODE"
           }

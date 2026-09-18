@@ -84,4 +84,17 @@ describe("fork build and release boundaries", () => {
       }
     }
   });
+
+  test("fork CI tests the portable archive instead of removed updater channels", () => {
+    const ci: any = Bun.YAML.parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"));
+    const steps = ci.jobs["windows-conpty-package"].steps;
+    const installer = steps.find((s: any) => s.name === "Test packaged installer and repair with Windows PowerShell 5.1");
+    expect(installer.if).toBe("github.repository == 'herdrdev/herdr'");
+    const archive = steps.find((s: any) => s.name === "Test fork portable archive with Windows PowerShell 5.1");
+    expect(archive.if).toBe("github.repository != 'herdrdev/herdr'");
+    expect(archive.run).toContain("Expand-Archive");
+    expect(archive.run).toContain("windows_smoke_conpty_path.ps1");
+    expect(archive.run).toContain('"herdr-dumb.exe"');
+    expect(archive.run).toContain("$LASTEXITCODE -ne 0");
+  });
 });
