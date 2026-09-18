@@ -59,6 +59,13 @@ describe("fork build and release boundaries", () => {
     expect(publish.steps.some((s: any) => s.run?.includes("checksums --directory dist"))).toBe(true);
   });
 
+  test("passes target triples without literal quotes through Windows cmd.exe", () => {
+    const justfile = readFileSync(new URL("../justfile", import.meta.url), "utf8");
+    const recipe = justfile.split("\ntest-release-target target:\n")[1].split("\n\n")[0];
+    expect(recipe).toContain("--target={{target}}");
+    expect(recipe).not.toContain('"{{target}}"');
+  });
+
   test("pins every action and does not interpolate event data into shell programs", () => {
     for (const job of Object.values(workflow.jobs) as any[]) {
       for (const step of job.steps) {

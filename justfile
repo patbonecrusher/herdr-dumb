@@ -81,7 +81,7 @@ build:
 
 # Native unit and local-only CLI tests for fork release targets.
 test-release-target target:
-    cargo nextest run --locked --target "{{target}}" --bin herdr-dumb --test local_only --status-level fail --final-status-level fail
+    cargo nextest run --locked --target={{target}} --bin herdr-dumb --test local_only --status-level fail --final-status-level fail
 
 # Non-gating full-render scaling profile for background workspaces and active panes
 bench-render-scale:
