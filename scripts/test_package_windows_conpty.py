@@ -170,6 +170,43 @@ class WindowsConptyPackageTests(unittest.TestCase):
         pe32 = self._pe_with_imports(0x8664, ["VCRUNTIME140.dll"], magic=0x10B)
         self.assertEqual(package.pe_imported_dlls(pe32), ["VCRUNTIME140.dll"])
 
+    def test_fork_executable_name_is_preserved_through_stage_and_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            nupkg = root / "conpty.nupkg"
+            self._write_package(nupkg, [], {})
+            metadata = root / "metadata.json"
+            metadata.write_text(json.dumps({
+                "schema_version": 1,
+                "package": {
+                    "id": "Microsoft.Windows.Console.ConPTY",
+                    "version": "1.24.260710001",
+                    "url": nupkg.as_uri(),
+                    "sha256": package.sha256_file(nupkg),
+                    "license": "MIT",
+                },
+                "bundles": {"x86_64": {"files": []}},
+                "notices": [],
+            }))
+            executable = root / "herdr-dumb.exe"
+            executable.write_bytes(self._pe_with_imports(0x8664, ["KERNEL32.dll"]))
+            stage = root / "stage"
+            package.stage_bundle(metadata, "x86_64", nupkg, executable, stage, "herdr-dumb.exe")
+            self.assertFalse((stage / "herdr.exe").exists())
+            output = root / "fork.zip"
+            package.archive_bundle(metadata, "x86_64", stage, output, "herdr-dumb.exe")
+            with zipfile.ZipFile(output) as archive:
+                self.assertIn("herdr-dumb.exe", archive.namelist())
+                self.assertNotIn("herdr.exe", archive.namelist())
+            (stage / "herdr-dumb.exe").write_bytes(self._pe_with_imports(0x8664, ["MSVCP140.dll"]))
+            with self.assertRaisesRegex(ValueError, "dynamic Microsoft"):
+                package.validate_stage(metadata, "x86_64", stage, "herdr-dumb.exe")
+
+    def test_executable_names_cannot_escape_the_bundle(self) -> None:
+        for name in ("../herdr-dumb.exe", "..\\herdr-dumb.exe", "/tmp/herdr.exe", "other.exe"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                package.validate_executable_name(name)
+
     def test_pe_imported_dlls_handles_va_based_delay_imports(self) -> None:
         # VA-based delay-import descriptors predate the RVA flag and are only
         # representable with a 32-bit image base.

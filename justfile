@@ -14,7 +14,8 @@ test:
 # Run repository maintenance contract tests
 maintenance-test:
     {{python}} -m unittest scripts.test_agent_detection_manifest_check scripts.test_changelog scripts.test_config_reference_check scripts.test_docs_translation_parity scripts.test_hermes_integration_asset scripts.test_package_windows_conpty scripts.test_preview scripts.test_release scripts.test_unix_installer scripts.test_vendor_libghostty_vt scripts.test_vendor_portable_pty scripts.test_windows_cross
-    bun test scripts/release-workflows.test.ts
+    bun test scripts/release-workflows.test.ts scripts/fork-release-workflow.test.ts
+    {{python}} -m unittest scripts.test_fork_release
 
 # Run one nextest filter, e.g. `just test-one codex_stale_working`
 test-one filter:
@@ -77,6 +78,10 @@ install-hooks:
 # Build release binary
 build:
     cargo build --release --locked
+
+# Native unit and local-only CLI tests for fork release targets.
+test-release-target target:
+    cargo nextest run --locked --target "{{target}}" --bin herdr-dumb --test local_only --status-level fail --final-status-level fail
 
 # Non-gating full-render scaling profile for background workspaces and active panes
 bench-render-scale:
