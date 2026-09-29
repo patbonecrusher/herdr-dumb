@@ -21,10 +21,6 @@ impl Version {
             patch: parts[2].parse().ok()?,
         })
     }
-
-    pub fn current() -> Self {
-        Self::parse(crate::build_info::BASE_VERSION).expect("invalid CARGO_PKG_VERSION")
-    }
 }
 
 impl std::fmt::Display for Version {

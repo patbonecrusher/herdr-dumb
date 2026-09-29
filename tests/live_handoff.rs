@@ -306,58 +306,6 @@ fn wait_for_api(socket_path: &Path, timeout: Duration) {
     );
 }
 
-fn write_plugin_manifest(root: &Path, plugin_id: &str) {
-    fs::create_dir_all(root).unwrap();
-    fs::write(
-        root.join("herdr-plugin.toml"),
-        format!(
-            r#"id = "{plugin_id}"
-name = "Live handoff test"
-version = "0.1.0"
-min_herdr_version = "0.6.10"
-platforms = ["linux", "macos", "windows"]
-"#
-        ),
-    )
-    .unwrap();
-}
-
-fn link_plugin(socket_path: &Path, root: &Path) {
-    assert_ok(request(
-        socket_path,
-        serde_json::json!({
-            "id": "test:plugin:link",
-            "method": "plugin.link",
-            "params": {"path": root, "enabled": true}
-        }),
-    ));
-}
-
-fn listed_plugin_ids(socket_path: &Path) -> Vec<String> {
-    let response = request(
-        socket_path,
-        serde_json::json!({"id":"test:plugin:list","method":"plugin.list","params":{}}),
-    );
-    assert_ok(response.clone());
-    response["result"]["plugins"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|plugin| plugin["plugin_id"].as_str().unwrap().to_string())
-        .collect()
-}
-
-fn saved_plugin_ids(registry_path: &Path) -> Vec<String> {
-    let mut ids =
-        serde_json::from_str::<Vec<serde_json::Value>>(&fs::read_to_string(registry_path).unwrap())
-            .unwrap()
-            .into_iter()
-            .map(|plugin| plugin["plugin_id"].as_str().unwrap().to_string())
-            .collect::<Vec<_>>();
-    ids.sort();
-    ids
-}
-
 fn wait_for_output(socket_path: &Path, pane_id: &str, needle: &str) {
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut last_text = String::new();
@@ -891,48 +839,103 @@ fn live_handoff_preserves_client_socket_env_without_api_socket_env() {
 }
 
 #[test]
-fn live_handoff_preserves_installed_plugins() {
+fn startup_and_handoff_ignore_legacy_plugins_and_reject_plugin_apis() {
     let _lock = test_lock();
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
     let api_socket = config_home.join("herdr-dumb-dev/herdr.sock");
     let registry_path = config_home.join("herdr-dumb-dev/plugins.json");
-    let existing_plugin = base.join("plugins/existing");
-    let added_plugin = base.join("plugins/added");
-    write_plugin_manifest(&existing_plugin, "test.live-handoff-existing");
-    write_plugin_manifest(&added_plugin, "test.live-handoff-added");
-
+    let plugin_root = base.join("old-plugin");
+    let marker = base.join("plugin-executed");
+    fs::create_dir_all(&plugin_root).unwrap();
+    fs::create_dir_all(registry_path.parent().unwrap()).unwrap();
+    let command = serde_json::json!(["sh", "-c", "touch \"$1\"", "plugin-test", marker]);
+    let manifest_path = plugin_root.join("herdr-plugin.toml");
+    fs::write(&manifest_path, format!(
+        "id = \"test.old-plugin\"\nname = \"Old plugin\"\nversion = \"0.1.0\"\nmin_herdr_version = \"0.6.10\"\n[[startup]]\ncommand = {command}\n[[events]]\non = \"workspace.created\"\ncommand = {command}\n"
+    )).unwrap();
+    let registry = serde_json::to_string(&serde_json::json!([{
+        "plugin_id": "test.old-plugin", "name": "Old plugin", "version": "0.1.0",
+        "min_herdr_version": "0.6.10", "manifest_path": manifest_path,
+        "plugin_root": plugin_root, "enabled": true,
+        "startup": [{"command": command}],
+        "events": [{"on": "workspace.created", "command": command}]
+    }]))
+    .unwrap();
+    fs::write(&registry_path, &registry).unwrap();
     let spawned = spawn_default_session_server(&config_home, &runtime_dir);
     wait_for_socket(&api_socket, Duration::from_secs(10));
     register_runtime_dir(&runtime_dir);
-
-    link_plugin(&api_socket, &existing_plugin);
-    assert_eq!(
-        listed_plugin_ids(&api_socket),
-        ["test.live-handoff-existing"]
-    );
-
-    assert_ok(request(
-        &api_socket,
-        serde_json::json!({"id":"test:handoff","method":"server.live_handoff","params":{}}),
-    ));
+    for phase in ["startup", "handoff"] {
+        for (method, params) in [
+            (
+                "plugin.link",
+                serde_json::json!({"path": plugin_root, "enabled": true}),
+            ),
+            ("plugin.list", serde_json::json!({})),
+            (
+                "plugin.unlink",
+                serde_json::json!({"plugin_id": "test.old-plugin"}),
+            ),
+            (
+                "plugin.enable",
+                serde_json::json!({"plugin_id": "test.old-plugin"}),
+            ),
+            (
+                "plugin.disable",
+                serde_json::json!({"plugin_id": "test.old-plugin"}),
+            ),
+            ("plugin.action.list", serde_json::json!({})),
+            (
+                "plugin.action.invoke",
+                serde_json::json!({"action_id": "test.old-plugin.run"}),
+            ),
+            ("plugin.log.list", serde_json::json!({})),
+            (
+                "plugin.pane.open",
+                serde_json::json!({"plugin_id": "test.old-plugin", "entrypoint": "board"}),
+            ),
+            (
+                "plugin.pane.focus",
+                serde_json::json!({"pane_id": "missing"}),
+            ),
+            (
+                "plugin.pane.close",
+                serde_json::json!({"pane_id": "missing"}),
+            ),
+        ] {
+            let response = request(
+                &api_socket,
+                serde_json::json!({"id": phase, "method": method, "params": params}),
+            );
+            assert_eq!(
+                response["error"]["code"], "feature_disabled",
+                "{method}: {response}"
+            );
+        }
+        assert_ok(request(
+            &api_socket,
+            serde_json::json!({
+                "id": phase, "method": "workspace.create", "params": {"cwd": base, "focus": true}
+            }),
+        ));
+        assert!(!marker.exists(), "legacy plugin executed during {phase}");
+        assert_eq!(fs::read_to_string(&registry_path).unwrap(), registry);
+        if phase == "startup" {
+            assert_ok(request(
+                &api_socket,
+                serde_json::json!({
+                    "id": "handoff", "method": "server.live_handoff", "params": {}
+                }),
+            ));
+            wait_for_api(&api_socket, Duration::from_secs(10));
+        }
+    }
     drop(spawned);
-    wait_for_api(&api_socket, Duration::from_secs(10));
-
-    assert_eq!(
-        listed_plugin_ids(&api_socket),
-        ["test.live-handoff-existing"]
-    );
-    link_plugin(&api_socket, &added_plugin);
-    assert_eq!(
-        saved_plugin_ids(&registry_path),
-        ["test.live-handoff-added", "test.live-handoff-existing"]
-    );
-
     let _ = request(
         &api_socket,
-        serde_json::json!({"id":"test:stop","method":"server.stop","params":{}}),
+        serde_json::json!({"id":"stop","method":"server.stop","params":{}}),
     );
     cleanup_test_base(&base);
 }

@@ -400,78 +400,7 @@ herdr-dumb integration status [--outdated-only]
 
 ## Plugins
 
-Plugin commands install and run local executable workflow plugins. A plugin is a manifest plus out-of-process commands; Herdr owns the host surface and plugins own their implementation language.
-
-Install, list, and remove plugins:
-
-```bash
-herdr-dumb plugin install <owner>/<repo>[/subdir...] [--ref REF] [--yes]
-herdr-dumb plugin list [--plugin ID] [--json]
-herdr-dumb plugin uninstall <plugin_id|owner/repo[/subdir...]>
-herdr-dumb plugin enable <plugin_id>
-herdr-dumb plugin disable <plugin_id>
-```
-
-`plugin install` accepts GitHub shorthand only, such as `ogulcancelik/herdr-plugin-examples/worktree-bootstrap`. It uses `git`, shows a trust preview in interactive terminals, runs supported manifest build commands, and stores GitHub installs in a Herdr-managed directory. Use `--yes` for noninteractive installs. Reinstalling a GitHub-managed plugin replaces that managed checkout. Installing over a locally linked plugin is refused. Plugin manifests must declare `min_herdr_version`; install and link fail when the plugin requires a newer Herdr binary. `plugin list` is human-readable by default; pass `--json` for the raw API response.
-
-Plugin installation and enabled state are global to the current user. A plugin installed, linked, enabled, or disabled through one Herdr session is immediately available with the same state in every session.
-
-Local development:
-
-```bash
-herdr-dumb plugin link <path> [--disabled]
-herdr-dumb plugin unlink <plugin_id>
-```
-
-`plugin link` accepts a plugin directory containing `herdr-plugin.toml` or a direct manifest path. Use it while authoring or testing a plugin from a local checkout. `plugin unlink` unregisters the plugin and leaves files alone. `plugin uninstall` unregisters a plugin and also removes Herdr-managed GitHub checkout files. For GitHub installs, uninstall accepts either the plugin id or the same `owner/repo[/subdir...]` shorthand used by install. Actions, event hooks, panes, and link handlers are declared in the manifest; runtime action registration is not part of v1.
-
-Config directory:
-
-```bash
-herdr-dumb plugin config-dir <plugin_id>
-```
-
-`plugin config-dir` prints the plugin's config directory. It creates the directory if needed and seeds it from legacy plugin config locations when present. Use it in setup docs and shell scripts to point users at a stable path for `.env` files and other user-editable config, separate from the managed plugin checkout.
-
-Actions:
-
-```bash
-herdr-dumb plugin action list [--plugin ID]
-herdr-dumb plugin action invoke <action_id> [--plugin ID]
-```
-
-`plugin action invoke` starts the manifest command for an installed, enabled,
-platform-compatible plugin action and prints the started command log record in
-the JSON response. Use the qualified action id (`plugin.id.action`) when more
-than one plugin uses the same action id. Local action ids cannot contain dots,
-so qualified ids remain unambiguous even when plugin ids contain dots.
-
-Logs:
-
-```bash
-herdr-dumb plugin log list [--plugin ID] [--limit N]
-```
-
-Managed terminal panes:
-
-```bash
-herdr-dumb plugin pane open --plugin ID --entrypoint ID [--placement overlay|popup|split|tab|zoomed] [--width SIZE] [--height SIZE] [--workspace ID] [--target-pane PANE] [--direction right|down] [--cwd PATH] [--env KEY=VALUE] [--focus|--no-focus]
-herdr-dumb plugin pane focus <pane_id>
-herdr-dumb plugin pane close <pane_id>
-```
-
-`plugin pane open` requires the plugin to be linked, enabled, and compatible
-with the current platform. It starts a manifest-declared `[[panes]]` command as
-a Herdr-managed terminal pane. The manifest default is `overlay`, which opens a
-temporary zoomed overlay over the active pane. It can also open as a split, a
-new tab, a zoomed pane, or a session-modal `popup` that does not change the tab
-layout. `--width` and `--height` set the outer popup dimensions in terminal
-cells or percentages such as `80%`; omitted dimensions default to half the
-terminal size, and values smaller than the popup minimum are clamped. A popup
-is not a Herdr pane, does not export `HERDR_PANE_ID`, and does not participate
-in pane or agent APIs. Native non-terminal plugin panes are outside plugin v1.
-
-`--env KEY=VALUE` can be repeated on process-launching commands. It applies to the newly launched process only. Herdr-managed variables such as `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`, `HERDR_ENV`, `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, `HERDR_PANE_ID`, `HERDR_PLUGIN_ID`, `HERDR_PLUGIN_ROOT`, `HERDR_PLUGIN_CONFIG_DIR`, `HERDR_PLUGIN_STATE_DIR`, `HERDR_PLUGIN_ENTRYPOINT_ID`, and `HERDR_PLUGIN_CONTEXT_JSON` stay authoritative when they conflict with caller-provided env.
+Third-party workflow plugins are not supported in herdr-dumb. Installation, discovery, manifests, actions, startup/event hooks, plugin panes, and link handlers have been removed.
 
 ## Read sources
 

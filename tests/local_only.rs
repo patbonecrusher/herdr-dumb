@@ -10,6 +10,10 @@ fn removed_remote_entry_points_are_rejected_without_starting_a_session() {
         vec!["machine", "list"],
         vec!["remote-client-bridge", "--check"],
         vec!["remote-api-bridge", "--check"],
+        vec!["plugin", "--help"],
+        vec!["plugin", "install", "untrusted/repo", "--yes"],
+        vec!["plugin", "link", "/nonexistent"],
+        vec!["plugin", "action", "invoke", "old.action"],
         vec!["update"],
         vec!["update", "--handoff"],
         vec!["channel", "set", "preview"],
@@ -47,6 +51,9 @@ fn help_config_and_completions_advertise_only_local_connections() {
             "version_check",
             "manifest_check",
             "update-agent-manifests",
+            "plugin_action",
+            "plugin install",
+            "herdr-dumb plugin",
         ] {
             assert!(!text.contains(removed), "{args:?} advertises {removed}");
         }
@@ -87,9 +94,33 @@ fn updater_processes_are_not_part_of_the_application() {
 }
 
 #[test]
-fn local_control_plugins_and_fork_guide_remain_available() {
+fn plugin_execution_is_not_part_of_startup_or_events() {
+    for source in [
+        include_str!("../src/main.rs"),
+        include_str!("../src/app/mod.rs"),
+        include_str!("../src/app/api.rs"),
+        include_str!("../src/server/headless/bootstrap.rs"),
+        include_str!("../src/persist.rs"),
+    ] {
+        for removed in [
+            "mod plugin_command",
+            "mod plugin_paths",
+            "mod plugin_registry",
+            "run_plugin_startup_hooks",
+            "run_plugin_event_hooks",
+            "load_plugin_registry",
+        ] {
+            assert!(
+                !source.contains(removed),
+                "plugin execution path returned: {removed}"
+            );
+        }
+    }
+}
+
+#[test]
+fn local_control_integrations_and_fork_guide_remain_available() {
     for args in [
-        vec!["plugin", "--help"],
         vec!["integration", "--help"],
         vec!["api", "--help"],
         vec!["--skill"],

@@ -12,30 +12,12 @@ pub(super) use crate::support::{
 };
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 
-pub(super) const WORKTREE_BOOTSTRAP_MANAGED_COMPONENT: &str =
-    "example.worktree-bootstrap-ef876653ffc3";
-
 pub(super) fn unique_test_dir() -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     PathBuf::from(format!("/tmp/hcli-{}-{nanos}", std::process::id()))
-}
-
-pub(super) fn managed_github_plugin_dir(config_home: &Path) -> PathBuf {
-    config_home
-        .join("herdr-dumb-dev")
-        .join("plugins")
-        .join("github")
-}
-
-pub(super) fn path_missing_or_empty(path: &Path) -> bool {
-    match fs::read_dir(path) {
-        Ok(mut entries) => entries.next().is_none(),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
-        Err(err) => panic!("failed to read {}: {err}", path.display()),
-    }
 }
 
 pub(super) fn run_git(repo: &Path, args: &[&str]) {

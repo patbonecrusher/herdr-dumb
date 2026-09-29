@@ -41,7 +41,7 @@ For internal testing, `HERDR_MANIFEST_URL` can point the installer at a custom m
 | Agent process-tree detection | supported |
 | Git/worktree detection from known cwd | supported |
 | System notifications and MP3 sounds | supported |
-| Plugins | preview |
+| Plugins | removed |
 | Pane screen history | supported |
 | Nested launch override | supported |
 
@@ -51,7 +51,7 @@ Windows agent process detection scans descendants of the pane shell and recogniz
 
 Windows integration installation currently supports Pi, OMP, Claude Code, Codex, GitHub Copilot CLI, Devin CLI, OpenCode, Kilo Code CLI, Droid, Kimi Code CLI, Qoder CLI, and Antigravity CLI. Availability is narrower than on Unix; Herdr hides or rejects integrations whose install format is not supported on Windows.
 
-Plugins support `windows` as a manifest platform in preview. GitHub install, local link, build commands, actions, events, and plugin panes are best-effort on Windows. Commands are argv commands and must be Windows-compatible; Node package shims such as `npm`, `bun`, and `node` are expected to work when they are on `PATH`, while Unix-only examples using `sh` or Bash need Windows-specific alternatives. Platform filters skip unsupported build commands and return `platform_unsupported` for unsupported actions or panes.
+Third-party workflow plugins are not supported in herdr-dumb. Installation, discovery, manifests, actions, startup/event hooks, plugin panes, and link handlers have been removed.
 
 ## Partial support
 

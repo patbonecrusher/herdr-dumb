@@ -367,63 +367,7 @@ herdr-dumb integration status [--outdated-only]
 
 ## プラグイン
 
-プラグインコマンドは、ローカル実行型ワークフロープラグインをインストールして実行します。プラグインはマニフェストとプロセス外コマンドの組み合わせです。ホスト側の面は Herdr が、実装言語はプラグインが担います。
-
-プラグインのインストール、一覧、削除:
-
-```bash
-herdr-dumb plugin install <owner>/<repo>[/subdir...] [--ref REF] [--yes]
-herdr-dumb plugin list [--plugin ID] [--json]
-herdr-dumb plugin uninstall <plugin_id|owner/repo[/subdir...]>
-herdr-dumb plugin enable <plugin_id>
-herdr-dumb plugin disable <plugin_id>
-```
-
-`plugin install` は `ogulcancelik/herdr-plugin-examples/worktree-bootstrap` のような GitHub 省略記法のみを受け付けます。`git` を使い、対話的なターミナルでは信頼プレビューを表示し、サポートされるマニフェストのビルドコマンドを実行し、GitHub インストールを Herdr 管理のディレクトリに保存します。非対話的なインストールには `--yes` を使ってください。GitHub 管理プラグインの再インストールは、その管理チェックアウトを置き換えます。ローカルにリンクされたプラグインへの上書きインストールは拒否されます。プラグインのマニフェストは `min_herdr_version` を宣言しなければならず、プラグインがより新しい Herdr バイナリを要求する場合、install と link は失敗します。`plugin list` はデフォルトで人間可読です。生の API レスポンスが欲しいときは `--json` を渡してください。
-
-ローカル開発:
-
-```bash
-herdr-dumb plugin link <path> [--disabled]
-herdr-dumb plugin unlink <plugin_id>
-```
-
-`plugin link` は `herdr-plugin.toml` を含むプラグインディレクトリ、またはマニフェストへの直接パスを受け付けます。ローカルチェックアウトからプラグインを作成・テストしている間はこれが正しいコマンドです。`plugin unlink` はプラグインの登録を解除し、ファイルには触れません。`plugin uninstall` はプラグインの登録を解除し、Herdr 管理の GitHub チェックアウトファイルも削除します。GitHub インストールの場合、uninstall はプラグイン id と、install で使うのと同じ `owner/repo[/subdir...]` 省略記法の両方を受け付けます。アクション、イベントフック、ペイン、リンクハンドラーはマニフェストで宣言します。ランタイムでのアクション登録は v1 の範囲外です。
-
-設定ディレクトリ:
-
-```bash
-herdr-dumb plugin config-dir <plugin_id>
-```
-
-`plugin config-dir` はプラグインの設定ディレクトリを表示し、必要なら作成します (レガシーなプラグイン設定の場所が存在すれば、そこから初期内容を移します)。セットアップドキュメントやシェルスクリプトで、管理されたプラグインチェックアウトとは別の、`.env` ファイルなどユーザーが編集する設定のための安定したパスをユーザーに示すのに使ってください。
-
-アクション:
-
-```bash
-herdr-dumb plugin action list [--plugin ID]
-herdr-dumb plugin action invoke <action_id> [--plugin ID]
-```
-
-`plugin action invoke` は、インストール済みで有効かつプラットフォーム互換のプラグインアクションのマニフェストコマンドを起動し、開始されたコマンドのログレコードを JSON レスポンスに表示します。複数のプラグインが同じアクション id を使っている場合は、修飾されたアクション id (`plugin.id.action`) を使ってください。ローカルのアクション id はドットを含められないため、プラグイン id がドットを含んでいても修飾 id は曖昧になりません。
-
-ログ:
-
-```bash
-herdr-dumb plugin log list [--plugin ID] [--limit N]
-```
-
-管理されたターミナルペイン:
-
-```bash
-herdr-dumb plugin pane open --plugin ID --entrypoint ID [--placement overlay|popup|split|tab|zoomed] [--width SIZE] [--height SIZE] [--workspace ID] [--target-pane PANE] [--direction right|down] [--cwd PATH] [--env KEY=VALUE] [--focus|--no-focus]
-herdr-dumb plugin pane focus <pane_id>
-herdr-dumb plugin pane close <pane_id>
-```
-
-`plugin pane open` は、プラグインがリンクされ、有効で、現在のプラットフォームと互換であることを要求します。マニフェストで宣言された `[[panes]]` コマンドを Herdr 管理のターミナルペインとして起動します。マニフェストのデフォルトは `overlay` で、アクティブなペインの上に一時的なズームオーバーレイを開きます。分割、新しいタブ、ズームされたペイン、またはタブレイアウトを変更しないセッションモーダルな `popup` として開くこともできます。`--width` と `--height` は、外側のポップアップ寸法をターミナルセル数または `80%` のような割合で指定します。省略した寸法はデフォルトでターミナルの半分になり、小さすぎる値はポップアップの最小サイズに制限されます。ポップアップは Herdr ペインではなく、`HERDR_PANE_ID` を受け取らず、pane API やエージェント API に参加しません。ターミナル以外のネイティブなプラグインペインは今後の対応面です。
-
-`--env KEY=VALUE` はプロセスを起動するコマンドで繰り返し指定できます。新しく起動されるプロセスにのみ適用されます。`HERDR_SOCKET_PATH`、`HERDR_BIN_PATH`、`HERDR_ENV`、`HERDR_WORKSPACE_ID`、`HERDR_TAB_ID`、`HERDR_PANE_ID`、`HERDR_PLUGIN_ID`、`HERDR_PLUGIN_ROOT`、`HERDR_PLUGIN_CONFIG_DIR`、`HERDR_PLUGIN_STATE_DIR`、`HERDR_PLUGIN_ENTRYPOINT_ID`、`HERDR_PLUGIN_CONTEXT_JSON` のような Herdr 管理の変数は、呼び出し側が与えた環境変数と衝突した場合も権威を保ちます。
+herdr-dumb はサードパーティのワークフロープラグインをサポートしません。インストール、検出、マニフェスト、アクション、起動・イベントフック、プラグインペイン、リンクハンドラーを削除しました。
 
 ## 読み取りソース
 

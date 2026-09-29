@@ -1002,7 +1002,8 @@ impl TryFrom<ClientShellCommandAction> for crate::config::CustomCommandAction {
             ClientShellCommandAction::Shell => Ok(Self::Shell),
             ClientShellCommandAction::Pane => Ok(Self::Pane),
             ClientShellCommandAction::Popup => Ok(Self::Popup),
-            ClientShellCommandAction::PluginAction => Ok(Self::PluginAction),
+            // Keep the frozen wire ordinal, but never enable plugin execution.
+            ClientShellCommandAction::PluginAction => Err(()),
             ClientShellCommandAction::Unknown => Err(()),
         }
     }

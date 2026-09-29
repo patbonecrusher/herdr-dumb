@@ -12,9 +12,9 @@ use super::{
 };
 
 pub(crate) use super::unix_common::{
-    configure_status_command, hostname, local_datetime, set_default_plugin_pane_pwd,
-    shutdown_client_stream, status_commands_supported, wait_client_stream_readable,
-    write_client_stream, ClientStreamReader, StatusCommandGuard,
+    configure_status_command, hostname, local_datetime, shutdown_client_stream,
+    status_commands_supported, wait_client_stream_readable, write_client_stream,
+    ClientStreamReader, StatusCommandGuard,
 };
 
 mod bootstrap;

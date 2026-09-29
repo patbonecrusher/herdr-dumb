@@ -296,7 +296,7 @@ fn custom_binding_invokes_only_the_endpoint_manifest_id() {
 }
 
 #[test]
-fn plugin_command_carries_client_owned_selection_coordinates() {
+fn legacy_plugin_command_is_rejected_without_endpoint_request() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let binding = crate::config::CustomCommandKeybind {
         bindings: crate::config::ActionKeybinds::prefix("p"),
@@ -329,21 +329,11 @@ fn plugin_command_carries_client_owned_selection_coordinates() {
     let mut outcome = ClientShellInput::default();
     state.record_binding(crate::input::KeybindMatch::Command(binding), &mut outcome);
 
-    let [ClientShellAction::Endpoint { request, .. }] = &outcome.actions[..] else {
-        panic!("expected endpoint command invocation");
-    };
-    let crate::api::schema::Method::CommandInvoke(params) = &request.method else {
-        panic!("expected command.invoke");
-    };
-    assert_eq!(
-        params.selection,
-        Some(crate::api::schema::PaneSelectionReadParams {
-            pane_id: "pane_1".into(),
-            anchor: crate::api::schema::PaneTextPoint { row: 2, col: 3 },
-            cursor: crate::api::schema::PaneTextPoint { row: 4, col: 5 },
-            content_revision: Some(42),
-        })
-    );
+    assert!(outcome.actions.is_empty());
+    assert!(state
+        .endpoint_error
+        .as_deref()
+        .is_some_and(|error| error.contains("plugin support has been removed")));
 }
 
 #[test]
@@ -555,11 +545,11 @@ fn help_overlay_restores_released_search_scroll_and_custom_binding_behavior() {
     projection
         .commands
         .push(crate::protocol::ClientShellCommand {
-            command_id: "plugin-action".into(),
+            command_id: "shell-command".into(),
             binding_label: "prefix+z".into(),
             binding_labels: vec!["prefix+z".into()],
-            action: crate::protocol::ClientShellCommandAction::PluginAction,
-            description: Some("run plugin action".into()),
+            action: crate::protocol::ClientShellCommandAction::Shell,
+            description: Some("run shell command".into()),
         });
     state.set_snapshot(Box::new(projection));
     state.set_pane_surface(surface());
@@ -584,7 +574,7 @@ fn help_overlay_restores_released_search_scroll_and_custom_binding_behavior() {
     assert_ne!(state.hits.help_scrollbar, Rect::default());
 
     state.handle_input_bytes(b"/");
-    state.handle_input_bytes(b"plugin");
+    state.handle_input_bytes(b"shell");
     let custom = state.compose(106, 30).expect("custom help search");
     let text = custom
         .cells
@@ -597,7 +587,7 @@ fn help_overlay_restores_released_search_scroll_and_custom_binding_behavior() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(text.contains("custom"));
-    assert!(text.contains("run plugin action"));
+    assert!(text.contains("run shell command"));
     state.handle_input_bytes(b"\x1b");
 
     state.handle_input_bytes(b"/");

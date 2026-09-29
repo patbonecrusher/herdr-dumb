@@ -82,6 +82,7 @@ pub enum CommandKeybindType {
     Shell,
     Pane,
     Popup,
+    /// Legacy configuration only; ignored before key registration.
     PluginAction,
 }
 
@@ -121,6 +122,7 @@ pub enum CustomCommandAction {
     Shell,
     Pane,
     Popup,
+    /// Inert legacy action: never registered, advertised, or executed.
     PluginAction,
 }
 
@@ -755,6 +757,13 @@ fn append_custom_command_bindings(
     diagnostics: &mut Vec<String>,
 ) {
     for (index, command) in config.keys.command.iter().enumerate() {
+        // Legacy plugin configuration must never register a binding or become a shell command.
+        if command.action_type == CommandKeybindType::PluginAction {
+            diagnostics.push(format!(
+                "keys.command[{index}]: plugin support has been removed; disabling custom command"
+            ));
+            continue;
+        }
         let key_field = format!("keys.command[{index}].key");
         let command_field = format!("keys.command[{index}].command");
 
@@ -1490,6 +1499,32 @@ fn is_unmodified_printable(combo: KeyCombo) -> bool {
 mod tests {
     use super::*;
     use crate::{config::Config, input::TerminalKey};
+
+    #[test]
+    fn legacy_plugin_bindings_are_ignored_without_reserving_keys() {
+        let config: Config = toml::from_str(
+            r#"
+[[keys.command]]
+key = "prefix+g"
+command = "old.plugin.run"
+type = "plugin_action"
+[[keys.command]]
+key = "prefix+g"
+command = "echo local"
+type = "shell"
+"#,
+        )
+        .unwrap();
+        let (live, diagnostics) = config.live_keybinds_with_diagnostics().unwrap();
+        assert_eq!(live.keybinds.custom_commands.len(), 1);
+        assert_eq!(
+            live.keybinds.custom_commands[0].action,
+            CustomCommandAction::Shell
+        );
+        assert_eq!(live.keybinds.custom_commands[0].command, "echo local");
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].contains("plugin support has been removed"));
+    }
 
     fn binding_triggers(bindings: &ActionKeybinds) -> Vec<BindingTrigger> {
         bindings

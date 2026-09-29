@@ -28,7 +28,6 @@ mod completion;
 mod integration;
 mod notification;
 mod pane;
-mod plugin;
 mod protocol_guard;
 mod runtime;
 mod server;
@@ -98,6 +97,12 @@ pub fn maybe_run(args: &[String]) -> std::io::Result<CommandOutcome> {
         return Ok(CommandOutcome::NotCli);
     };
 
+    // Reject legacy plugin invocations before generic help or session startup.
+    if command == "plugin" {
+        eprintln!("unknown command: plugin (plugin support has been removed)");
+        return Ok(CommandOutcome::Handled(2));
+    }
+
     if spec::print_requested_help(args)? {
         return Ok(CommandOutcome::Handled(0));
     }
@@ -120,7 +125,6 @@ pub fn maybe_run(args: &[String]) -> std::io::Result<CommandOutcome> {
         "agent" => agent::run_agent_command(&args[2..])?,
         "terminal" => run_terminal_command(&args[2..])?,
         "pane" => pane::run_pane_command(&args[2..])?,
-        "plugin" => plugin::run_plugin_command(&args[2..])?,
         "integration" => integration::run_integration_command(&args[2..])?,
         "session" => run_session_command(&args[2..])?,
         _ => return Ok(CommandOutcome::NotCli),
@@ -676,7 +680,7 @@ pub(crate) fn server_not_running_was_reported(err: &std::io::Error) -> bool {
 
 /// Returns the `ErrorResponse` carried by a `server_not_running` marker, if any,
 /// so the edge that surfaces the error can print it exactly once (deferred
-/// printing: recovering callers like plugin offline fallback print nothing).
+/// printing: callers decide how to present or recover from an error).
 pub(crate) fn server_not_running_reported_response(
     err: &std::io::Error,
 ) -> Option<&crate::api::schema::ErrorResponse> {

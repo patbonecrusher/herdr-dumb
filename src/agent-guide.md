@@ -46,7 +46,7 @@ herdr-dumb --default-config
 
 Config and state directories use `herdr-dumb` (`herdr-dumb-dev` in debug builds),
 separate from upstream Herdr. The existing `HERDR_*` environment contract is
-retained for agent/plugin compatibility. Explicit `HERDR_SOCKET_PATH` and
+retained for agent compatibility. Explicit `HERDR_SOCKET_PATH` and
 `HERDR_CLIENT_SOCKET_PATH` overrides take precedence; clear them to avoid
 targeting another installation. `HERDR_BIN_PATH` identifies this executable
 inside managed panes and is the preferred executable path for hooks.
@@ -59,7 +59,11 @@ Build manually with `just build` to produce `target/release/herdr-dumb`.
 Bundled detection rules and local overrides remain supported; use
 `herdr-dumb server reload-agent-manifests` after editing a local override.
 
-Plugin installation/downloads, local agent integrations, opening web links,
-and local clipboard operations remain available. Inspect `plugin --help` and
-`integration --help` before changing installations. Plugins and pane programs
+Third-party plugin installation, discovery, actions, hooks, panes, and link handlers
+are removed. Old plugin registries are ignored; legacy plugin API calls are rejected.
+Fully stop old Herdr sessions before using this build: handoff does not terminate
+programs that were already running. Existing plugin files are not deleted.
+
+Built-in agent integrations, opening web links, and clipboard operations remain
+available. Inspect integration --help before changing integrations. Pane programs
 run with the user's privileges and are not sandboxed; only run trusted code.

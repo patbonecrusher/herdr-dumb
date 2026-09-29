@@ -5,9 +5,9 @@ mod agents;
 mod env;
 mod integrations;
 mod layouts;
+mod links;
 mod pane_graphics;
 mod panes;
-pub(crate) mod plugins;
 pub(super) mod responses;
 mod session;
 mod tabs;
@@ -123,37 +123,6 @@ impl App {
         } = ev
         {
             let _ = self.handle_tab_bar_command_finished(generation, segment_index, result);
-            return Vec::new();
-        }
-
-        if let AppEvent::PluginCommandFinished {
-            log_id,
-            finished_unix_ms,
-            exit_code,
-            stdout,
-            stderr,
-            error,
-        } = ev
-        {
-            self.state.plugin_commands_in_flight =
-                self.state.plugin_commands_in_flight.saturating_sub(1);
-            if let Some(log) = self
-                .state
-                .plugin_command_logs
-                .iter_mut()
-                .find(|log| log.log_id == log_id)
-            {
-                log.finished_unix_ms = Some(finished_unix_ms);
-                log.exit_code = exit_code;
-                log.stdout = Some(stdout);
-                log.stderr = Some(stderr);
-                log.error = error;
-                log.status = if log.error.is_none() && log.exit_code == Some(0) {
-                    crate::api::schema::PluginCommandStatus::Succeeded
-                } else {
-                    crate::api::schema::PluginCommandStatus::Failed
-                };
-            }
             return Vec::new();
         }
 
@@ -751,7 +720,6 @@ impl App {
     }
 
     pub(super) fn emit_event(&mut self, event: crate::api::schema::EventEnvelope) {
-        self.run_plugin_event_hooks(&event);
         self.event_hub.push(event);
     }
 
@@ -765,8 +733,7 @@ impl App {
     }
 
     pub(crate) fn emit_workspace_token_updated(&mut self, ws_idx: usize) {
-        // Token updates bypass plugin hooks so a hook cannot refresh its own
-        // token and recursively trigger workspace.updated.
+        // Metadata updates have their own event kind, separate from workspace lifecycle.
         self.event_hub.push(crate::api::schema::EventEnvelope {
             event: crate::api::schema::EventKind::WorkspaceMetadataUpdated,
             data: crate::api::schema::EventData::WorkspaceMetadataUpdated {
@@ -1196,38 +1163,23 @@ impl App {
             Method::IntegrationUninstall(params) => {
                 return self.handle_integration_uninstall(request.id, params);
             }
-            Method::PluginLink(params) => {
-                return self.handle_plugin_link(request.id, params);
-            }
-            Method::PluginList(params) => {
-                return self.handle_plugin_list(request.id, params);
-            }
-            Method::PluginUnlink(params) => {
-                return self.handle_plugin_unlink(request.id, params);
-            }
-            Method::PluginEnable(params) => {
-                return self.handle_plugin_enable(request.id, params);
-            }
-            Method::PluginDisable(params) => {
-                return self.handle_plugin_disable(request.id, params);
-            }
-            Method::PluginActionList(params) => {
-                return self.handle_plugin_action_list(request.id, params);
-            }
-            Method::PluginActionInvoke(params) => {
-                return self.handle_plugin_action_invoke(request.id, params);
-            }
-            Method::PluginLogList(params) => {
-                return self.handle_plugin_log_list(request.id, params);
-            }
-            Method::PluginPaneOpen(params) => {
-                return self.handle_plugin_pane_open(request.id, params);
-            }
-            Method::PluginPaneFocus(params) => {
-                return self.handle_plugin_pane_focus(request.id, params);
-            }
-            Method::PluginPaneClose(params) => {
-                return self.handle_plugin_pane_close(request.id, params);
+            // Frozen protocol variants remain parseable, without a plugin runtime.
+            Method::PluginLink(_)
+            | Method::PluginList(_)
+            | Method::PluginUnlink(_)
+            | Method::PluginEnable(_)
+            | Method::PluginDisable(_)
+            | Method::PluginActionList(_)
+            | Method::PluginActionInvoke(_)
+            | Method::PluginLogList(_)
+            | Method::PluginPaneOpen(_)
+            | Method::PluginPaneFocus(_)
+            | Method::PluginPaneClose(_) => {
+                return responses::encode_error(
+                    request.id,
+                    "feature_disabled",
+                    "plugin support has been removed",
+                );
             }
             _ => {
                 return responses::encode_error(
@@ -1377,6 +1329,71 @@ pub(super) mod test_support {
 mod tests {
     use super::*;
     use crate::detect::{Agent, AgentState};
+
+    #[test]
+    fn all_legacy_plugin_methods_are_rejected_without_state_changes() {
+        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &crate::config::Config::default(),
+            crate::app::AppPolicy::TEST,
+            None,
+            rx,
+            crate::api::EventHub::default(),
+        );
+        for (method, params) in [
+            (
+                "plugin.link",
+                serde_json::json!({"path": "/never-load-this-manifest"}),
+            ),
+            ("plugin.list", serde_json::json!({})),
+            (
+                "plugin.unlink",
+                serde_json::json!({"plugin_id": "old.plugin"}),
+            ),
+            (
+                "plugin.enable",
+                serde_json::json!({"plugin_id": "old.plugin"}),
+            ),
+            (
+                "plugin.disable",
+                serde_json::json!({"plugin_id": "old.plugin"}),
+            ),
+            ("plugin.action.list", serde_json::json!({})),
+            (
+                "plugin.action.invoke",
+                serde_json::json!({"action_id": "old.plugin.run"}),
+            ),
+            ("plugin.log.list", serde_json::json!({})),
+            (
+                "plugin.pane.open",
+                serde_json::json!({"plugin_id": "old.plugin", "entrypoint": "board"}),
+            ),
+            (
+                "plugin.pane.focus",
+                serde_json::json!({"pane_id": "missing"}),
+            ),
+            (
+                "plugin.pane.close",
+                serde_json::json!({"pane_id": "missing"}),
+            ),
+        ] {
+            let request: crate::api::schema::Request = serde_json::from_value(serde_json::json!({
+                "id": "removed", "method": method, "params": params
+            }))
+            .unwrap();
+            assert!(!crate::api::request_changes_ui(&request));
+            let response: serde_json::Value =
+                serde_json::from_str(&app.handle_api_request(request)).unwrap();
+            assert_eq!(
+                response["error"]["code"], "feature_disabled",
+                "{method}: {response}"
+            );
+            assert!(app.state.workspaces.is_empty());
+            assert!(app.state.terminals.is_empty());
+            assert!(app.state.popup_pane.is_none());
+            assert!(app.detached_process_children.is_empty());
+        }
+    }
 
     #[cfg(unix)]
     fn init_repo(path: &std::path::Path) {

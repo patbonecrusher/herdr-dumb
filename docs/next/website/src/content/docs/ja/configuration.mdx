@@ -206,15 +206,7 @@ Windows では、代わりに `command = "powershell.exe -NoLogo"` のような�
 
 `type = "shell"` はバックグラウンドでデタッチ実行します。
 
-`type = "plugin_action"` はインストール済みプラグインのアクション id を呼び出します。アクション id がグローバルに一意でない場合は修飾 id を使ってください:
-
-```toml
-[[keys.command]]
-key = "prefix+l"
-type = "plugin_action"
-command = "example.layout.apply"
-description = "apply layout"
-```
+旧 plugin_action キーバインドは診断付きで無視されます。shell、pane、popup コマンドは引き続き利用できます。
 
 任意で `description` を指定できます。指定すると、キーバインドヘルプパネル（`prefix+?` で開く）に、デフォルトの `'custom command'` ラベルの代わりに表示されます。
 

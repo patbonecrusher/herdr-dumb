@@ -206,15 +206,7 @@ height = "80%"
 
 `type = "shell"` 会在后台分离运行。
 
-`type = "plugin_action"` 会调用已安装插件的动作 id。当动作 id 并非全局唯一时，请使用限定 id：
-
-```toml
-[[keys.command]]
-key = "prefix+l"
-type = "plugin_action"
-command = "example.layout.apply"
-description = "apply layout"
-```
+旧 plugin_action 快捷键会被忽略并给出诊断。shell、pane 和 popup 命令仍受支持。
 
 可以提供可选的 `description`。指定后，该描述会在按键绑定帮助面板（通过 `prefix+?` 打开）中显示，替代默认的 `'custom command'` 标签。
 
@@ -425,7 +417,7 @@ claude = [
 
 覆盖项会替换 `rows`，而不是扩展它。覆盖项的键是区分大小写的规范智能体 ID，例如 `claude`、`codex` 和 `pi`。不接受 `claude-code` 等检测别名。没有覆盖项的智能体（包括自定义报告的智能体）会使用 `rows`。
 
-自定义 `$name` token 是动态值，而不是字面文本。先将 token 添加到布局，再通过脚本或插件报告其值：
+自定义 `$name` token 是动态值，而不是字面文本。先将 token 添加到布局，再通过脚本报告其值：
 
 ```toml
 [ui.sidebar.agents]

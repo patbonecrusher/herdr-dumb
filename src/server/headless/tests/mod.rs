@@ -145,7 +145,6 @@ fn completed_handoff_disables_only_old_server_session_persistence() {
 
     assert!(!server.app.policy.persist_session);
     assert!(server.app.policy.restore_session);
-    assert!(server.app.policy.persist_plugin_registry);
 }
 
 #[test]

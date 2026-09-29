@@ -37,7 +37,7 @@ socket API 可以:
 - 创建、列出、聚焦、重命名和关闭标签页
 - 列出、检查、分割、交换、聚焦、调整、重命名、读取、关闭窗格并向其发送输入
 - 通过 CLI 辅助命令列出、检查、读取、提示、等待、重命名、聚焦、启动和附加智能体
-- 从钩子和插件上报自定义智能体状态
+- 从钩子和脚本上报自定义智能体状态
 - 订阅事件并等待输出或状态变化
 - 安装和卸载内置集成
 - 停止服务器并重载配置
@@ -105,7 +105,6 @@ herdr pane read w1:p2 --source recent --lines 50
 | 智能体 | `agent.list`、`agent.get`、`agent.read`、`agent.explain`、`agent.send_keys`、`agent.prompt`、`agent.wait`、`agent.rename`、`agent.focus`、`agent.start` |
 | 事件 | `events.subscribe`、`events.wait` |
 | 集成 | `integration.install`、`integration.uninstall` |
-| 插件 | `plugin.link`、`plugin.list`、`plugin.unlink`、`plugin.enable`、`plugin.disable`、`plugin.action.list`、`plugin.action.invoke`、`plugin.log.list`、`plugin.pane.open`、`plugin.pane.focus`、`plugin.pane.close` |
 
 `agent.wait` 由服务器拥有并由事件驱动。它会固定到已解析的窗格占用者,因此替换后的智能体不能满足该等待。`agent.prompt` 接受可选的 `wait` 对象,其中包含 `until` 和 `timeout_ms`;这样可在一个请求中提交提示并开始等待,避免两个独立调用之间的竞态。如果解析出的智能体已经是 `blocked`,`agent.prompt` 不会发送输入或开始等待,而是返回 `agent_blocked`。
 
@@ -147,7 +146,7 @@ CLI 的 `herdr api snapshot` 会把当前 `session.snapshot` 响应输出为 JSO
 
 ### 窗格图形
 
-窗格图形允许插件在窗格上放置图像数据。该功能默认可用；当服务器设置 `[terminal].kitty_graphics = false` 时，所有窗格图形方法都返回 `feature_disabled`。更改此设置需要重启服务器。调用 `pane.graphics.info` 会返回所连接客户端的单元格像素宽度和高度,但不会创建图形层。`pane.graphics.set` 接受 `data_base64` 中的 `png`、`rgb` 或 `rgba` 数据,`pane.graphics.clear` 删除该图层。
+窗格图形允许本地脚本在窗格上放置图像数据。该功能默认可用；当服务器设置 `[terminal].kitty_graphics = false` 时，所有窗格图形方法都返回 `feature_disabled`。更改此设置需要重启服务器。调用 `pane.graphics.info` 会返回所连接客户端的单元格像素宽度和高度,但不会创建图形层。`pane.graphics.set` 接受 `data_base64` 中的 `png`、`rgb` 或 `rgba` 数据,`pane.graphics.clear` 删除该图层。
 
 ```json
 {"id":"graphics_info","method":"pane.graphics.info","params":{"pane_id":"w1:p1"}}
@@ -316,7 +315,7 @@ UI 上下文变化时,该投影会重新求值。它控制展开和折叠的侧�
   "id": "view_set",
   "method": "agent.view.set",
   "params": {
-    "source": "plugin:example.agent-views",
+    "source": "local:example.agent-views",
     "label": "focus",
     "filter": {
       "op": "any",
@@ -343,7 +342,7 @@ UI 上下文变化时,该投影会重新求值。它控制展开和折叠的侧�
 
 过滤节点的 `op` 可以是 `all`、`any`、`not`、`eq`、`in` 或 `exists`。内置
 过滤字段是 `status`、`workspace_id`、`tab_id`、`pane_id`、`agent`、`seen`
-和 `state_change_seq`。要过滤插件上报的窗格元数据,使用 `{"token":"name"}`
+和 `state_change_seq`。要过滤脚本上报的窗格元数据,使用 `{"token":"name"}`
 作为字段。值可以是字符串、布尔值、无符号整数或上下文对象。上下文值包括
 `current_workspace_id` 和 `current_tab_id`，并且只能与对应的 ID 字段比较。
 有效 status 值为 `idle`、`working`、`blocked`、`done` 和 `unknown`;`done`
@@ -355,17 +354,13 @@ UI 上下文变化时,该投影会重新求值。它控制展开和折叠的侧�
 `sort` 时,现有 `ui.agent_panel_sort` 策略继续生效。自定义排序会临时替换该
 策略,但不会重写配置。
 
-`source` 标识所有者。插件使用 `plugin:<HERDR_PLUGIN_ID>`;当所属插件不存在
-或被禁用时,Herdr 会拒绝设置。其他调用方可以使用自己的非 `plugin:` source。
-设置成功会原子替换之前的视图。该视图会持续到被 clear、被替换、所属插件被
-disable、unlink 或 uninstall,或者服务器退出。需要持久行为的插件应把查询保存到
-`HERDR_PLUGIN_STATE_DIR`,并从 `[[startup]]` 钩子重新应用。
+source 标识调用者。以 plugin: 开头的 source 会被拒绝。其他 source 仍受支持；视图持续到被清除、替换或服务器退出。
 
 可以无条件 clear,也可以只在指定 source 仍拥有视图时 clear:
 
 ```json
 {"id":"view_clear","method":"agent.view.clear","params":{}}
-{"id":"view_clear_owned","method":"agent.view.clear","params":{"source":"plugin:example.agent-views"}}
+{"id":"view_clear_owned","method":"agent.view.clear","params":{"source":"local:example.agent-views"}}
 ```
 
 source 不匹配时,活动视图保持不变。set 和 clear 响应使用
@@ -373,109 +368,7 @@ source 不匹配时,活动视图保持不变。set 和 clear 响应使用
 
 ## 插件 API
 
-插件 API 是面向可执行工作流工具的早期宿主面。插件是带 `herdr-plugin.toml` 清单的包。清单声明可分享的动作、事件钩子、终端窗格入口点和链接处理器。动作和窗格仅限清单声明;运行时动作注册和运行时 argv 窗格创建不在 v1 范围内。
-
-安装和链接的插件跨重启持久化。在 `plugin.link`、`plugin.unlink`、`plugin.enable` 和 `plugin.disable` 时,Herdr 在 `session.json` 旁写入一个 `plugins.json` 注册表文件。Herdr 不在运行时,`herdr plugin install` CLI 也写同一个注册表,然后启动时自动加载。启动时,Herdr 从原始路径重新读取每个清单;文件缺失或无法解析时,条目会带着 `warnings` 字段保留,`plugin.list` 会将其展示出来。
-
-事件钩子的 `on` 值在链接时会对照已知的 Herdr 事件名校验。无法识别的名称不算错误 — 链接仍会成功 — 但返回的插件信息会包含警告 (例如 `"unknown event 'worktree.craeted'"`)。检查 `plugin.link` 和 `plugin.list` 响应中的 `warnings` 字段。
-
-链接本地插件清单:
-
-```json
-{"id":"req_plugin_link","method":"plugin.link","params":{"path":"/path/to/plugin","enabled":true}}
-```
-
-`plugin.link` 也接受可选的 `source` 元数据。CLI 从 GitHub 安装时使用它,让 `plugin.list` 能显示来源、请求的 ref、解析的 commit 和托管检出路径:
-
-```json
-{"id":"req_plugin_link","method":"plugin.link","params":{"path":"/managed/plugin/herdr-plugin.toml","enabled":true,"source":{"kind":"github","owner":"ogulcancelik","repo":"herdr-plugin-examples","subdir":"worktree-bootstrap","requested_ref":"main","resolved_commit":"abc123","managed_path":"/data/plugins/github/<managed-checkout>","installed_unix_ms":1780000000000}}}
-```
-
-路径可以是包含 `herdr-plugin.toml` 的插件目录,或直接指向清单的路径。清单结构如下:
-
-```toml
-id = "example.worktree-bootstrap"
-name = "Worktree Bootstrap"
-version = "0.1.0"
-min_herdr_version = "0.7.0"
-description = "Prepare new worktrees"
-platforms = ["linux", "macos", "windows"]
-
-[[build]]
-command = ["bun", "install"]
-
-[[actions]]
-id = "bootstrap"
-title = "Bootstrap worktree"
-contexts = ["workspace"]
-command = ["bun", "run", "bootstrap.ts"]
-
-[[events]]
-on = "worktree.created"
-command = ["bun", "run", "bootstrap.ts"]
-
-[[panes]]
-id = "board"
-title = "Worktree board"
-placement = "overlay"
-command = ["bun", "run", "board.ts"]
-
-[[link_handlers]]
-id = "github-issue"
-title = "Open GitHub issue"
-pattern = "^https://github\\.com/[^/]+/[^/]+/(issues|pull)/[0-9]+$"
-action = "bootstrap"
-```
-
-`min_herdr_version` 是必填项。字段缺失、无效,或比运行中的 Herdr 二进制更新时,服务器拒绝链接插件。
-
-在顶层用你的插件支持的操作系统标识 (`linux`、`macos`、`windows`) 声明 `platforms`。本地开发允许省略 `platforms` — `plugin.link` 会成功,但响应包含警告。单个构建命令、动作、事件钩子、窗格和链接处理器可以声明自己的 `platforms` 来覆盖插件级列表;省略时从插件继承。调用有效 platforms 不包含当前操作系统的动作或打开这样的窗格,会返回 `platform_unsupported` 错误。
-
-列出、启用、禁用或取消链接插件:
-
-```json
-{"id":"req_plugin_list","method":"plugin.list","params":{}}
-{"id":"req_plugin_disable","method":"plugin.disable","params":{"plugin_id":"example.worktree-bootstrap"}}
-{"id":"req_plugin_enable","method":"plugin.enable","params":{"plugin_id":"example.worktree-bootstrap"}}
-{"id":"req_plugin_unlink","method":"plugin.unlink","params":{"plugin_id":"example.worktree-bootstrap"}}
-```
-
-动作从链接的清单解析。`plugin.action.list` 返回所有已安装插件的全部动作;传 `plugin_id` 过滤。
-
-```json
-{"id":"req_plugin_actions","method":"plugin.action.list","params":{}}
-{"id":"req_plugin_actions_filtered","method":"plugin.action.list","params":{"plugin_id":"example.worktree-bootstrap"}}
-```
-
-`plugin.action.list` 返回应用插件级继承后每个动作的有效 `platforms`。
-
-用限定 id 或裸动作 id 调用动作:
-
-```json
-{"id":"req_plugin_invoke","method":"plugin.action.invoke","params":{"action_id":"example.worktree-bootstrap.bootstrap","context":{"invocation_source":"keybinding"}}}
-```
-
-`plugin.action.invoke` 解析清单动作,启动清单命令,并返回 Herdr 构建的调用上下文和已启动命令的日志记录。缺失的上下文字段会从活动工作区、标签页、聚焦窗格、worktree 来源信息和请求 id 补全。调用被禁用插件的动作返回 `plugin_disabled` 错误。
-
-Herdr 注入 `HERDR_SOCKET_PATH`、`HERDR_BIN_PATH`、`HERDR_ENV=1`、`HERDR_PLUGIN_ID`、`HERDR_PLUGIN_ROOT`、`HERDR_PLUGIN_CONFIG_DIR`、`HERDR_PLUGIN_STATE_DIR`、`HERDR_PLUGIN_CONTEXT_JSON`,以及可用的 `HERDR_WORKSPACE_ID`、`HERDR_TAB_ID` 和 `HERDR_PANE_ID` 值。动作命令还收到 `HERDR_PLUGIN_ACTION_ID`;事件钩子收到 `HERDR_PLUGIN_EVENT` 和 `HERDR_PLUGIN_EVENT_JSON`;窗格命令收到 `HERDR_PLUGIN_ENTRYPOINT_ID`。
-
-列出最近的动作和事件命令日志:
-
-```json
-{"id":"req_plugin_logs","method":"plugin.log.list","params":{"plugin_id":"example.worktree-bootstrap","limit":20}}
-```
-
-当 Herdr 发出匹配的事件名 (比如 `worktree.created`) 时,事件钩子为已启用的已安装插件运行。
-
-v1 没有 Herdr 管理的插件存储 API。`HERDR_PLUGIN_CONFIG_DIR` 和 `HERDR_PLUGIN_STATE_DIR` 只提供路径发现;文件、schema、迁移和清理归插件所有。
-
-打开托管终端 UI:
-
-```json
-{"id":"req_plugin_pane","method":"plugin.pane.open","params":{"plugin_id":"example.board","entrypoint":"board","placement":"zoomed","target_pane_id":"w1:p1","env":{"HERDR_ROLE":"board"},"focus":true}}
-```
-
-`plugin.pane.open` 要求已安装、已启用、平台兼容的插件,然后把请求的清单 `[[panes]]` 入口点作为 argv 支撑的终端窗格启动。清单窗格的 `placement` 默认为 `overlay`;请求的 `placement` 可以用 `overlay`、`popup`、`split`、`tab` 或 `zoomed` 覆盖清单。overlay 和 popup 使用活动平铺窗格作为启动上下文。弹窗终端是会话级模态界面,不会改变标签页布局;可选的 `width` 和 `height` 以终端单元格数或 `"80%"` 这样的百分比设置外层尺寸。省略时默认为终端大小的一半,过小的值会限制为弹窗最小尺寸。弹窗没有窗格 id,不属于任何 `pane.*` 或智能体 API,不会发出窗格生命周期事件,会把插件焦点上下文保留在底层平铺窗格上,也不会向其进程导出 `HERDR_PANE_ID`。弹窗启动返回 `ok`;`popup.close` 关闭活动弹窗,没有弹窗时返回 `popup_not_open`。split 和 zoomed 针对已有窗格,tab 可以针对工作区。split、tab、zoomed 和 overlay 打开后表现得像普通 Herdr 窗格,`plugin.pane.focus` 和 `plugin.pane.close` 仍可操作这些窗格。
+herdr-dumb 不支持第三方工作流插件。安装、发现、清单、动作、启动和事件钩子、插件窗格以及链接处理器均已移除。
 
 ## Socket 传输
 
@@ -515,7 +408,7 @@ Herdr 在本地 socket 上使用换行分隔的 JSON。在 Unix 上,那个 socke
 
 `HERDR_SOCKET_PATH` 只用于底层覆盖。
 
-对插件来说,需要可移植的 Windows 行为时,优先调用 `HERDR_BIN_PATH` 和 CLI 包装命令。原始 socket 客户端要自己负责使用平台原生的本地 socket 形式。
+对脚本来说,需要可移植的 Windows 行为时,优先调用 `HERDR_BIN_PATH` 和 CLI 包装命令。原始 socket 客户端要自己负责使用平台原生的本地 socket 形式。
 
 ## 智能体状态上报
 

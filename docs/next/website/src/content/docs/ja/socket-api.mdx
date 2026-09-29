@@ -37,7 +37,7 @@ herdr api schema --output herdr-api.schema.json
 - タブの作成、一覧、フォーカス、名前変更、クローズ
 - ペインの一覧、調査、分割、入れ替え、フォーカス、リサイズ、名前変更、読み取り、クローズ、入力送信
 - CLI ヘルパーを通じたエージェントの一覧、調査、読み取り、プロンプト、待機、名前変更、フォーカス、起動、アタッチ
-- フックやプラグインからのカスタムエージェント状態の報告
+- フックやスクリプトからのカスタムエージェント状態の報告
 - イベントの購読と、出力や状態変化の待機
 - 組み込みインテグレーションのインストールとアンインストール
 - サーバーの停止と設定のリロード
@@ -105,7 +105,6 @@ herdr pane read w1:p2 --source recent --lines 50
 | エージェント | `agent.list`、`agent.get`、`agent.read`、`agent.explain`、`agent.send_keys`、`agent.prompt`、`agent.wait`、`agent.rename`、`agent.focus`、`agent.start` |
 | イベント | `events.subscribe`、`events.wait` |
 | インテグレーション | `integration.install`、`integration.uninstall` |
-| プラグイン | `plugin.link`、`plugin.list`、`plugin.unlink`、`plugin.enable`、`plugin.disable`、`plugin.action.list`、`plugin.action.invoke`、`plugin.log.list`、`plugin.pane.open`、`plugin.pane.focus`、`plugin.pane.close` |
 
 `agent.wait` はサーバー所有でイベント駆動です。解決したペイン占有者に固定されるため、置換されたエージェントが待機を満たすことはありません。`agent.prompt` は `until` と `timeout_ms` を持つ省略可能な `wait` オブジェクトを受け付けます。これにより、プロンプト送信と待機開始を 1 つのリクエストで行い、別々の呼び出し間の競合を避けられます。解決したエージェントがすでに `blocked` の場合、`agent.prompt` は入力を送信せず、待機も開始せずに `agent_blocked` を返します。
 
@@ -147,7 +146,7 @@ CLI の `herdr api snapshot` は、クライアントやエージェントが簡
 
 ### ペイングラフィックス
 
-ペイングラフィックスを使うと、プラグインがペイン上に画像データを配置できます。デフォルトで利用でき、サーバーで `[terminal].kitty_graphics = false` が設定されている場合は、すべてのペイングラフィックスメソッドが `feature_disabled` を返します。この設定の変更にはサーバーの再起動が必要です。`pane.graphics.info` はグラフィックスレイヤーを作成せず、接続中クライアントのセルの幅と高さをピクセル単位で返します。`pane.graphics.set` は `data_base64` の `png`、`rgb`、`rgba` データを受け取り、`pane.graphics.clear` はレイヤーを削除します。
+ペイングラフィックスを使うと、ローカルスクリプトがペイン上に画像データを配置できます。デフォルトで利用でき、サーバーで `[terminal].kitty_graphics = false` が設定されている場合は、すべてのペイングラフィックスメソッドが `feature_disabled` を返します。この設定の変更にはサーバーの再起動が必要です。`pane.graphics.info` はグラフィックスレイヤーを作成せず、接続中クライアントのセルの幅と高さをピクセル単位で返します。`pane.graphics.set` は `data_base64` の `png`、`rgb`、`rgba` データを受け取り、`pane.graphics.clear` はレイヤーを削除します。
 
 ```json
 {"id":"graphics_info","method":"pane.graphics.info","params":{"pane_id":"w1:p1"}}
@@ -317,7 +316,7 @@ worktree コマンドはライフサイクルイベントも発行します。`w
   "id": "view_set",
   "method": "agent.view.set",
   "params": {
-    "source": "plugin:example.agent-views",
+    "source": "local:example.agent-views",
     "label": "focus",
     "filter": {
       "op": "any",
@@ -344,7 +343,7 @@ worktree コマンドはライフサイクルイベントも発行します。`w
 
 フィルターノードの `op` には `all`、`any`、`not`、`eq`、`in`、`exists` を使います。
 組み込みフィールドは `status`、`workspace_id`、`tab_id`、`pane_id`、`agent`、
-`seen`、`state_change_seq` です。プラグインが報告したペインメタデータを絞り込むには、
+`seen`、`state_change_seq` です。ローカルスクリプトが報告したペインメタデータを絞り込むには、
 フィールドとして `{"token":"name"}` を使います。値には文字列、真偽値、符号なし整数、
 またはコンテキストオブジェクトを指定できます。コンテキスト値は
 `current_workspace_id` と `current_tab_id` で、対応する ID フィールドとの比較にだけ
@@ -358,18 +357,13 @@ worktree コマンドはライフサイクルイベントも発行します。`w
 `ui.agent_panel_sort` ポリシーが有効です。カスタムソートは設定を書き換えず、一時的に
 そのポリシーを置き換えます。
 
-`source` は所有者を識別します。プラグインは `plugin:<HERDR_PLUGIN_ID>` を使います。
-所有元のプラグインが存在しないか無効な場合、Herdr は設定を拒否します。他の呼び出し元は
-独自の非 `plugin:` source を使えます。設定に成功すると以前のビューはアトミックに
-置き換えられます。ビューは clear または置換されるか、所有プラグインが disable、unlink、
-uninstall されるか、サーバーが終了するまで有効です。永続的な動作が必要なプラグインは、
-クエリを `HERDR_PLUGIN_STATE_DIR` に保存し、`[[startup]]` フックから再適用してください。
+source は呼び出し元を識別します。plugin: で始まる source は拒否されます。それ以外の source は利用でき、ビューはクリア、置換、またはサーバー終了まで有効です。
 
 無条件で clear するか、指定した source がまだ所有している場合だけ clear できます:
 
 ```json
 {"id":"view_clear","method":"agent.view.clear","params":{}}
-{"id":"view_clear_owned","method":"agent.view.clear","params":{"source":"plugin:example.agent-views"}}
+{"id":"view_clear_owned","method":"agent.view.clear","params":{"source":"local:example.agent-views"}}
 ```
 
 source が一致しない場合、アクティブなビューは変わりません。set と clear のレスポンスは
@@ -377,109 +371,7 @@ source が一致しない場合、アクティブなビューは変わりませ�
 
 ## プラグイン API
 
-プラグイン API は、実行可能なワークフローツールのための初期のホスト面です。プラグインは `herdr-plugin.toml` マニフェストを持つパッケージです。マニフェストは、共有可能なアクション、イベントフック、ターミナルペインのエントリーポイント、リンクハンドラーを宣言します。アクションとペインはマニフェスト専用です。ランタイムでのアクション登録とランタイムでの argv ペイン作成は v1 の範囲外です。
-
-インストールおよびリンクされたプラグインは再起動をまたいで永続化されます。Herdr は `plugin.link`、`plugin.unlink`、`plugin.enable`、`plugin.disable` の際に、`session.json` の隣に `plugins.json` レジストリファイルを書き込みます。`herdr plugin install` CLI も、Herdr が動作していないときに同じレジストリを書き込み、起動時に自動的に読み込まれます。起動時、Herdr は各マニフェストを元のパスから再読み込みします。ファイルが欠落しているかパースできない場合、エントリは `warnings` フィールド付きで保持され、`plugin.list` がそれを表面化します。
-
-イベントフックの `on` の値は、リンク時に既知の Herdr イベント名と照合されます。認識されない名前はエラーではなく、リンクは成功しますが、返されるプラグイン情報に警告が含まれます (例: `"unknown event 'worktree.craeted'"`)。`plugin.link` と `plugin.list` のレスポンスの `warnings` フィールドを確認してください。
-
-ローカルのプラグインマニフェストをリンクする:
-
-```json
-{"id":"req_plugin_link","method":"plugin.link","params":{"path":"/path/to/plugin","enabled":true}}
-```
-
-`plugin.link` は任意の `source` メタデータも受け付けます。CLI は GitHub からインストールするときにこれを使い、`plugin.list` が出自、要求された ref、解決されたコミット、管理チェックアウトのパスを表示できるようにします:
-
-```json
-{"id":"req_plugin_link","method":"plugin.link","params":{"path":"/managed/plugin/herdr-plugin.toml","enabled":true,"source":{"kind":"github","owner":"ogulcancelik","repo":"herdr-plugin-examples","subdir":"worktree-bootstrap","requested_ref":"main","resolved_commit":"abc123","managed_path":"/data/plugins/github/<managed-checkout>","installed_unix_ms":1780000000000}}}
-```
-
-パスは `herdr-plugin.toml` を含むプラグインディレクトリでも、マニフェストへの直接パスでも構いません。マニフェストの形式は次のとおりです:
-
-```toml
-id = "example.worktree-bootstrap"
-name = "Worktree Bootstrap"
-version = "0.1.0"
-min_herdr_version = "0.7.0"
-description = "Prepare new worktrees"
-platforms = ["linux", "macos", "windows"]
-
-[[build]]
-command = ["bun", "install"]
-
-[[actions]]
-id = "bootstrap"
-title = "Bootstrap worktree"
-contexts = ["workspace"]
-command = ["bun", "run", "bootstrap.ts"]
-
-[[events]]
-on = "worktree.created"
-command = ["bun", "run", "bootstrap.ts"]
-
-[[panes]]
-id = "board"
-title = "Worktree board"
-placement = "overlay"
-command = ["bun", "run", "board.ts"]
-
-[[link_handlers]]
-id = "github-issue"
-title = "Open GitHub issue"
-pattern = "^https://github\\.com/[^/]+/[^/]+/(issues|pull)/[0-9]+$"
-action = "bootstrap"
-```
-
-`min_herdr_version` は必須です。このフィールドが欠落している、無効、または実行中の Herdr バイナリより新しい場合、サーバーはプラグインのリンクを拒否します。
-
-プラグインが対応する OS 識別子 (`linux`、`macos`、`windows`) をトップレベルの `platforms` で宣言してください。ローカル開発では `platforms` の省略が許されます — `plugin.link` は成功しますが、レスポンスに警告が含まれます。個々のビルドコマンド、アクション、イベントフック、ペイン、リンクハンドラーは独自の `platforms` を宣言してプラグインレベルのリストを上書きできます。省略時はプラグインから継承します。実効的な platforms が現在の OS を含まないアクションの呼び出しやペインのオープンは `platform_unsupported` エラーを返します。
-
-リンク済みプラグインの一覧、有効化、無効化、リンク解除:
-
-```json
-{"id":"req_plugin_list","method":"plugin.list","params":{}}
-{"id":"req_plugin_disable","method":"plugin.disable","params":{"plugin_id":"example.worktree-bootstrap"}}
-{"id":"req_plugin_enable","method":"plugin.enable","params":{"plugin_id":"example.worktree-bootstrap"}}
-{"id":"req_plugin_unlink","method":"plugin.unlink","params":{"plugin_id":"example.worktree-bootstrap"}}
-```
-
-アクションはリンクされたマニフェストから解決されます。`plugin.action.list` はインストール済みプラグイン全体のすべてのアクションを返します。絞り込むには `plugin_id` を渡してください。
-
-```json
-{"id":"req_plugin_actions","method":"plugin.action.list","params":{}}
-{"id":"req_plugin_actions_filtered","method":"plugin.action.list","params":{"plugin_id":"example.worktree-bootstrap"}}
-```
-
-`plugin.action.list` は、プラグインレベルの継承を適用した後の各アクションの実効的な `platforms` を返します。
-
-修飾 id または素のアクション id でアクションを呼び出す:
-
-```json
-{"id":"req_plugin_invoke","method":"plugin.action.invoke","params":{"action_id":"example.worktree-bootstrap.bootstrap","context":{"invocation_source":"keybinding"}}}
-```
-
-`plugin.action.invoke` はマニフェストのアクションを解決し、マニフェストのコマンドを起動し、Herdr が構築した呼び出しコンテキストと、開始されたコマンドのログレコードを返します。欠けているコンテキストフィールドは、アクティブなワークスペース、タブ、フォーカス中のペイン、worktree の出自情報、リクエスト id から補完されます。無効化されたプラグインのアクションの呼び出しは `plugin_disabled` エラーを返します。
-
-Herdr は `HERDR_SOCKET_PATH`、`HERDR_BIN_PATH`、`HERDR_ENV=1`、`HERDR_PLUGIN_ID`、`HERDR_PLUGIN_ROOT`、`HERDR_PLUGIN_CONFIG_DIR`、`HERDR_PLUGIN_STATE_DIR`、`HERDR_PLUGIN_CONTEXT_JSON`、そして利用可能な `HERDR_WORKSPACE_ID`、`HERDR_TAB_ID`、`HERDR_PANE_ID` の値を注入します。アクションコマンドは加えて `HERDR_PLUGIN_ACTION_ID` を受け取ります。イベントフックは `HERDR_PLUGIN_EVENT` と `HERDR_PLUGIN_EVENT_JSON` を、ペインコマンドは `HERDR_PLUGIN_ENTRYPOINT_ID` を受け取ります。
-
-直近のアクションおよびイベントコマンドのログを一覧する:
-
-```json
-{"id":"req_plugin_logs","method":"plugin.log.list","params":{"plugin_id":"example.worktree-bootstrap","limit":20}}
-```
-
-イベントフックは、Herdr が `worktree.created` のような一致するイベント名を発行したときに、有効なインストール済みプラグインに対して実行されます。
-
-v1 には Herdr が管理するプラグインストレージ API はありません。`HERDR_PLUGIN_CONFIG_DIR` と `HERDR_PLUGIN_STATE_DIR` はパスの発見だけを提供します。ファイル、スキーマ、マイグレーション、クリーンアップはプラグインが所有します。
-
-管理されたターミナル UI を開く:
-
-```json
-{"id":"req_plugin_pane","method":"plugin.pane.open","params":{"plugin_id":"example.board","entrypoint":"board","placement":"zoomed","target_pane_id":"w1:p1","env":{"HERDR_ROLE":"board"},"focus":true}}
-```
-
-`plugin.pane.open` は、インストール済みで有効かつプラットフォーム互換のプラグインを要求し、要求されたマニフェストの `[[panes]]` エントリーポイントを argv ベースのターミナルペインとして起動します。マニフェストのペイン `placement` のデフォルトは `overlay` です。リクエストの `placement` は `overlay`、`popup`、`split`、`tab`、`zoomed` でマニフェストを上書きできます。overlay と popup はアクティブなタイルペインを起動コンテキストとして使います。ポップアップターミナルはセッションモーダルで、タブレイアウトを変更しません。任意の `width` と `height` は、外側のサイズをターミナルセル数または `"80%"` のような割合で指定します。省略した寸法はデフォルトでターミナルの半分になり、小さすぎる値は最小サイズに制限されます。ポップアップはペイン id を持たず、`pane.*` とエージェント API の対象外で、ペインのライフサイクルイベントを発行せず、プラグインのフォーカスコンテキストを背後のタイルペインに維持し、そのプロセスへ `HERDR_PANE_ID` を渡しません。起動は `ok` を返し、`popup.close` はアクティブなポップアップを閉じ、ポップアップがない場合は `popup_not_open` を返します。split と zoomed は既存のペインを対象とし、tab はワークスペースを対象にできます。split、tab、zoomed、overlay は通常の Herdr ペインとして振る舞い、`plugin.pane.focus` と `plugin.pane.close` は引き続きそれらのペインに作用します。
+herdr-dumb はサードパーティのワークフロープラグインをサポートしません。インストール、検出、マニフェスト、アクション、起動・イベントフック、プラグインペイン、リンクハンドラーを削除しました。
 
 ## ソケットトランスポート
 
@@ -519,7 +411,7 @@ Herdr はローカルソケット上の改行区切り JSON を使います。Un
 
 `HERDR_SOCKET_PATH` は低レベルな上書きにのみ使ってください。
 
-プラグインでは、移植性のある Windows の挙動が必要なときは `HERDR_BIN_PATH` と CLI ラッパーの呼び出しを推奨します。生のソケットクライアントは、プラットフォームネイティブのローカルソケット形式を使う責任を負います。
+スクリプトでは、移植性のある Windows の挙動が必要なときは `HERDR_BIN_PATH` と CLI ラッパーの呼び出しを推奨します。生のソケットクライアントは、プラットフォームネイティブのローカルソケット形式を使う責任を負います。
 
 ## エージェント状態の報告
 

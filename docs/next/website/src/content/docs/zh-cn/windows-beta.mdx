@@ -41,7 +41,7 @@ curl.exe -fsSLo install.cmd https://herdr.dev/install.cmd && install.cmd && del 
 | 智能体进程树检测 | 已支持 |
 | 从已知 cwd 检测 Git/worktree | 已支持 |
 | 系统通知和 MP3 声音 | 已支持 |
-| 插件 | 预览 |
+| 插件 | 已移除 |
 | 窗格屏幕历史 | 已支持 |
 | 嵌套启动覆盖 | 已支持 |
 
@@ -51,7 +51,7 @@ Windows 智能体进程检测会扫描窗格 shell 的后代进程,识别直接�
 
 Windows 目前支持安装 Pi、OMP、Claude Code、Codex、GitHub Copilot CLI、Devin CLI、OpenCode、Kilo Code CLI、Droid、Kimi Code CLI、Qoder CLI 和 Antigravity CLI 集成。可用范围比 Unix 更窄;安装格式不受 Windows 支持的集成会被隐藏或拒绝。
 
-插件以预览状态支持在清单中声明 `windows` 平台。GitHub 安装、本地链接、构建命令、动作、事件和插件窗格在 Windows 上尽力而为。命令是 argv 命令,必须兼容 Windows;`npm`、`bun`、`node` 之类的 Node 包 shim 只要在 `PATH` 上就应该能用,而使用 `sh` 或 Bash 的 Unix 专用示例需要 Windows 专用的替代方案。平台过滤器会跳过不支持的构建命令,并对不支持的动作或窗格返回 `platform_unsupported`。
+herdr-dumb 不支持第三方工作流插件。安装、发现、清单、动作、启动和事件钩子、插件窗格以及链接处理器均已移除。
 
 ## 部分支持
 
