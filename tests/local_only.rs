@@ -119,6 +119,27 @@ fn plugin_execution_is_not_part_of_startup_or_events() {
 }
 
 #[test]
+fn client_clipboard_images_are_never_staged_or_pasted() {
+    for source in [
+        include_str!("../src/server/mod.rs"),
+        include_str!("../src/server/headless.rs"),
+        include_str!("../src/server/client_transport.rs"),
+    ] {
+        for removed in [
+            "mod clipboard_image",
+            "ServerEvent::ClientClipboardImage",
+            "staged_clipboard_files",
+            "paste_client_clipboard_image_path",
+        ] {
+            assert!(
+                !source.contains(removed),
+                "clipboard image forwarding path returned: {removed}"
+            );
+        }
+    }
+}
+
+#[test]
 fn local_control_integrations_and_fork_guide_remain_available() {
     for args in [
         vec!["integration", "--help"],

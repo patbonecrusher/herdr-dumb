@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use crate::protocol::{
     ClientKeyCode, ClientKeyKind, ClientMouseButton, ClientMouseKind, ClientPaneInputEvent,
@@ -172,7 +171,6 @@ pub(crate) struct ClientConnection {
     /// Presses forwarded by this shell that need release on abrupt teardown.
     shell_held_inputs: HashMap<ClientShellPressId, ClientShellHeldInput>,
     /// Temporary files staged from this client's local clipboard image pastes.
-    pub(crate) staged_clipboard_files: Vec<PathBuf>,
     /// Connection-local workspace and tab projection for a client-owned shell.
     pub(crate) shell_location: Option<ClientShellLocation>,
     /// Last coherent shell replacement sent to this client.
@@ -243,7 +241,6 @@ impl ClientConnection {
             host_sgr_pixels_active: None,
             host_keyboard_protocol_active: None,
             shell_held_inputs: HashMap::new(),
-            staged_clipboard_files: Vec::new(),
             shell_location: None,
             shell_snapshot: None,
             shell_agent_view: None,

@@ -33,7 +33,6 @@ use tracing::error;
 use tracing::{debug, info, warn};
 
 use base64::Engine;
-use bytes::Bytes;
 
 use crate::api;
 use crate::app;
@@ -69,7 +68,6 @@ use crate::server::pane_input::{
 use crate::server::socket_paths::{
     client_socket_path, prepare_socket_path, restrict_socket_permissions,
 };
-use crate::server::terminal_attach::paste_payload_for_runtime;
 
 mod bootstrap;
 mod client_views;
@@ -1017,7 +1015,6 @@ impl HeadlessServer {
         if let Some(mut removed) = removed {
             let held_inputs = removed.drain_shell_held_inputs();
             self.release_client_shell_inputs(client_id, held_inputs);
-            crate::server::clipboard_image::remove_files(removed.staged_clipboard_files);
             if let ClientConnectionMode::TerminalAttach { terminal_id } = removed.mode {
                 self.terminal_attach_owners.remove(&terminal_id);
                 if let Some(terminal_id) = self.terminal_id_by_string(&terminal_id) {
@@ -1177,152 +1174,6 @@ impl HeadlessServer {
             .resolve_terminal_target(target)
             .ok()
             .map(|resolved| resolved.terminal_id)
-    }
-
-    fn client_clipboard_image_target_is_valid(
-        &self,
-        client_id: u64,
-        target: &protocol::ClientClipboardImageTarget,
-    ) -> bool {
-        match target {
-            protocol::ClientClipboardImageTarget::DirectTerminal => {
-                self.clients.get(&client_id).is_some_and(|client| {
-                    matches!(client.mode, ClientConnectionMode::TerminalAttach { .. })
-                })
-            }
-            protocol::ClientClipboardImageTarget::Pane(pane_id) => {
-                !self.handoff_in_progress
-                    && self.app.state.popup_pane.is_none()
-                    && self
-                        .clients
-                        .get(&client_id)
-                        .is_some_and(ClientConnection::is_active_shell_client)
-                    && self.app.parse_pane_id(pane_id).is_some()
-            }
-            protocol::ClientClipboardImageTarget::Popup(terminal_id) => {
-                !self.handoff_in_progress
-                    && self
-                        .clients
-                        .get(&client_id)
-                        .is_some_and(ClientConnection::is_active_shell_client)
-                    && self
-                        .app
-                        .state
-                        .popup_pane
-                        .as_ref()
-                        .is_some_and(|popup| popup.terminal_id.as_str() == terminal_id)
-            }
-        }
-    }
-
-    fn stage_client_clipboard_image(
-        &self,
-        client_id: u64,
-        extension: &str,
-        data: &[u8],
-    ) -> std::io::Result<crate::server::clipboard_image::StagedClipboardImage> {
-        let staged = crate::server::clipboard_image::stage(client_id, extension, data)?;
-        info!(client_id, bytes = data.len(), path = %staged.paste_text, "staged client clipboard image");
-        Ok(staged)
-    }
-
-    fn paste_client_clipboard_image_path(
-        &mut self,
-        client_id: u64,
-        target: protocol::ClientClipboardImageTarget,
-        path: String,
-    ) -> bool {
-        match target {
-            protocol::ClientClipboardImageTarget::DirectTerminal => {
-                let Some(ClientConnection {
-                    mode: ClientConnectionMode::TerminalAttach { terminal_id },
-                    ..
-                }) = self.clients.get(&client_id)
-                else {
-                    return false;
-                };
-                if let Some(runtime) = self.runtime_for_terminal_id_string(terminal_id) {
-                    let payload = paste_payload_for_runtime(runtime, &path);
-                    if let Err(err) = runtime.try_send_bytes(Bytes::from(payload)) {
-                        warn!(client_id, terminal_id = %terminal_id, err = %err, "terminal attach clipboard image paste failed");
-                    }
-                }
-                true
-            }
-            protocol::ClientClipboardImageTarget::Pane(pane_id) => {
-                if self.handoff_in_progress
-                    || !self
-                        .clients
-                        .get(&client_id)
-                        .is_some_and(ClientConnection::is_active_shell_client)
-                {
-                    return false;
-                }
-                let Some((workspace_index, runtime_pane_id)) = self.app.parse_pane_id(&pane_id)
-                else {
-                    return false;
-                };
-                let popup_blocks_input = self.app.state.popup_pane.is_some()
-                    && self.popup_owner_tab_id == self.shell_tab_id_for_client(client_id);
-                if popup_blocks_input
-                    || !self.shell_client_views_pane(client_id, workspace_index, runtime_pane_id)
-                {
-                    return false;
-                }
-                let foreground_changed = self.promote_client_to_foreground(client_id);
-                let geometry_changed = self.claim_shell_tab_geometry(client_id, false);
-                let Some(runtime) = self.app.state.runtime_for_pane_in_workspace(
-                    &self.app.terminal_runtimes,
-                    workspace_index,
-                    runtime_pane_id,
-                ) else {
-                    return foreground_changed | geometry_changed;
-                };
-                if let Err(err) = apply_client_pane_input_events(
-                    runtime,
-                    &[protocol::ClientPaneInputEvent::Paste(path)],
-                ) {
-                    warn!(client_id, pane_id, err = %err, "client shell clipboard image paste failed");
-                }
-                true
-            }
-            protocol::ClientClipboardImageTarget::Popup(terminal_id) => {
-                if self.handoff_in_progress
-                    || !self
-                        .clients
-                        .get(&client_id)
-                        .is_some_and(ClientConnection::is_active_shell_client)
-                {
-                    return false;
-                }
-                let Some(popup_terminal_id) = self
-                    .app
-                    .state
-                    .popup_pane
-                    .as_ref()
-                    .map(|popup| popup.terminal_id.clone())
-                else {
-                    return false;
-                };
-                if popup_terminal_id.as_str() != terminal_id
-                    || self.popup_owner_tab_id != self.shell_tab_id_for_client(client_id)
-                {
-                    return false;
-                }
-                let foreground_changed = self.promote_client_to_foreground(client_id);
-                let geometry_changed = self.claim_shell_tab_geometry(client_id, false);
-                let Some(runtime) = self.app.terminal_runtimes.get(&popup_terminal_id) else {
-                    return foreground_changed | geometry_changed;
-                };
-                if let Err(err) = apply_client_popup_input_events(
-                    runtime,
-                    &[protocol::ClientPaneInputEvent::Paste(path)],
-                ) {
-                    warn!(client_id, terminal_id, err = %err, "client shell popup clipboard image paste failed");
-                }
-                true
-            }
-        }
     }
 
     fn resolve_terminal_session_target(
@@ -2167,46 +2018,6 @@ impl HeadlessServer {
                 };
                 self.send_to_client(client_id, message);
                 false
-            }
-            ServerEvent::ClientClipboardImage {
-                client_id,
-                target,
-                extension,
-                data,
-            } => {
-                debug!(
-                    client_id,
-                    len = data.len(),
-                    extension = %extension,
-                    "client clipboard image received"
-                );
-                if !self.client_clipboard_image_target_is_valid(client_id, &target) {
-                    return false;
-                }
-                match self.stage_client_clipboard_image(client_id, &extension, &data) {
-                    Ok(staged) => {
-                        let routed = self.paste_client_clipboard_image_path(
-                            client_id,
-                            target,
-                            staged.paste_text,
-                        );
-                        if routed {
-                            if let Some(client) = self.clients.get_mut(&client_id) {
-                                client.staged_clipboard_files.push(staged.path);
-                            } else {
-                                crate::server::clipboard_image::remove_files(vec![staged.path]);
-                                return false;
-                            }
-                        } else {
-                            crate::server::clipboard_image::remove_files(vec![staged.path]);
-                        }
-                        routed
-                    }
-                    Err(err) => {
-                        warn!(client_id, err = %err, "failed to stage client clipboard image");
-                        true
-                    }
-                }
             }
             ServerEvent::ClientResize {
                 client_id,
@@ -3431,12 +3242,6 @@ fn client_pane_input_has_interaction(events: &[protocol::ClientPaneInputEvent]) 
 
 impl Drop for HeadlessServer {
     fn drop(&mut self) {
-        let staged_files = self
-            .clients
-            .drain()
-            .flat_map(|(_, client)| client.staged_clipboard_files)
-            .collect::<Vec<_>>();
-        crate::server::clipboard_image::remove_files(staged_files);
         let _ = self.cleanup_sockets();
     }
 }

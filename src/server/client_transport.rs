@@ -23,8 +23,7 @@ use crate::protocol::endpoint::{
 };
 use crate::protocol::{
     self, AttachScrollDirection, AttachScrollSource, ClientMessage, ClientPaneInputEvent,
-    RenderEncoding, ServerMessage, MAX_CLIPBOARD_IMAGE_PAYLOAD, MAX_FRAME_SIZE,
-    MAX_GRAPHICS_FRAME_SIZE, PROTOCOL_VERSION,
+    RenderEncoding, ServerMessage, MAX_FRAME_SIZE, MAX_GRAPHICS_FRAME_SIZE, PROTOCOL_VERSION,
 };
 
 /// Minimum accepted attached client size.
@@ -421,13 +420,6 @@ pub(crate) enum ServerEvent {
         client_id: u64,
         size: usize,
         max: usize,
-    },
-    /// A client sent local clipboard image bytes to paste into a remote pane.
-    ClientClipboardImage {
-        client_id: u64,
-        target: crate::protocol::ClientClipboardImageTarget,
-        extension: String,
-        data: Vec<u8>,
     },
     /// A client requested direct attach to one terminal.
     ClientAttachTerminal {
@@ -1089,28 +1081,14 @@ fn client_read_loop_with_endpoint_controls(
                 transfer_id,
                 image_id,
             },
-            ClientMessage::ClipboardImage {
-                target,
-                extension,
-                data,
-            } => {
-                if data.len() > MAX_CLIPBOARD_IMAGE_PAYLOAD {
-                    warn!(
-                        client_id,
-                        size = data.len(),
-                        "oversized clipboard image from client, closing"
-                    );
-                    let _ = server_event_tx
-                        .blocking_send(ServerEvent::ClientDisconnected { client_id });
-                    break;
-                } else {
-                    ServerEvent::ClientClipboardImage {
-                        client_id,
-                        target,
-                        extension,
-                        data,
-                    }
-                }
+            // Keep the frozen wire ordinal, but never write client clipboard
+            // images to disk or paste them into panes.
+            ClientMessage::ClipboardImage { .. } => {
+                debug!(
+                    client_id,
+                    "ignoring clipboard image; image forwarding is disabled"
+                );
+                continue;
             }
             ClientMessage::Resize {
                 cols,
@@ -2020,6 +1998,43 @@ mod tests {
             .join()
             .expect("handshake thread join")
             .expect("handshake thread result");
+        assert!(server_event_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn client_read_loop_ignores_clipboard_images() {
+        let (mut client_stream, server_stream, _path) = local_stream_pair("client-read-image");
+        let (server_event_tx, mut server_event_rx) = mpsc::channel(4);
+        let should_quit = Arc::new(AtomicBool::new(false));
+        let read_quit = should_quit.clone();
+        let handle = std::thread::spawn(move || {
+            client_read_loop(server_stream, 7, &server_event_tx, &read_quit)
+        });
+
+        let mut messages = Vec::new();
+        protocol::write_message(
+            &mut messages,
+            &ClientMessage::ClipboardImage {
+                target: crate::protocol::ClientClipboardImageTarget::DirectTerminal,
+                extension: "png".into(),
+                data: vec![1, 2, 3],
+            },
+        )
+        .unwrap();
+        protocol::write_message(&mut messages, &ClientMessage::Detach).unwrap();
+        client_stream
+            .write_all(&messages)
+            .expect("write clipboard image and detach");
+
+        // The image is dropped without an event; the connection stays usable.
+        assert!(matches!(
+            recv_server_event(&mut server_event_rx, "detach event"),
+            ServerEvent::ClientDetach { client_id: 7 }
+        ));
+        handle
+            .join()
+            .expect("read thread join")
+            .expect("read thread result");
         assert!(server_event_rx.try_recv().is_err());
     }
 

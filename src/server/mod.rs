@@ -8,7 +8,6 @@ pub(crate) mod client_shell;
 pub(crate) mod client_shell_graphics;
 pub(crate) mod client_transport;
 pub(crate) mod clients;
-pub(crate) mod clipboard_image;
 #[cfg(unix)]
 pub(crate) mod handoff;
 pub mod headless;
@@ -19,4 +18,3 @@ pub(crate) mod pane_input;
 mod render_scale_benchmark;
 pub(crate) mod render_stream;
 pub mod socket_paths;
-pub(crate) mod terminal_attach;

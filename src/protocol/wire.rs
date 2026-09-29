@@ -28,9 +28,6 @@ pub const MAX_FRAME_SIZE: usize = 2 * 1024 * 1024;
 /// image payloads that are naturally much larger after base64 encoding.
 pub const MAX_GRAPHICS_FRAME_SIZE: usize = 32 * 1024 * 1024;
 
-/// Maximum clipboard image payload size for remote paste bridging.
-pub const MAX_CLIPBOARD_IMAGE_PAYLOAD: usize = 16 * 1024 * 1024;
-
 /// Length of the u32 little-endian length prefix in bytes.
 const LENGTH_PREFIX_BYTES: usize = 4;
 
