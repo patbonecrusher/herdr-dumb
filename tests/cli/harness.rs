@@ -193,15 +193,6 @@ pub(super) fn run_named_cli_with_socket_override(
     run_named_cli_with_env_and_socket_override(config_home, runtime_dir, args, &[], socket_override)
 }
 
-pub(super) fn run_named_cli_with_env(
-    config_home: &Path,
-    runtime_dir: &Path,
-    args: &[&str],
-    envs: &[(&str, &Path)],
-) -> std::process::Output {
-    run_named_cli_with_env_and_socket_override(config_home, runtime_dir, args, envs, None)
-}
-
 pub(super) fn run_named_cli_with_env_and_socket_override(
     config_home: &Path,
     runtime_dir: &Path,
