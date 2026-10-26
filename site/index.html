@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>herdr-dumb — agent multiplexer for locked-down environments</title>
+<meta name="description" content="herdr-dumb is a local-only fork of herdr with networking, self-update, plugins, and clipboard image forwarding removed, so security teams can approve it for restricted environments." />
+<link rel="icon" href="logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --surface-2: #efefeb;
+    --text: #17181a;
+    --muted: #5b5f66;
+    --line: #dcdcd6;
+    --accent: #1f7a4d;
+    --accent-soft: #e2f1e8;
+    --danger: #a23b2a;
+    --danger-soft: #f6e4e0;
+    --code-bg: #17181a;
+    --code-text: #e6e6e1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1011;
+      --surface: #17181a;
+      --surface-2: #1e2022;
+      --text: #ecece8;
+      --muted: #9a9ea5;
+      --line: #2b2e31;
+      --accent: #5fcf94;
+      --accent-soft: #15291e;
+      --danger: #ef8a76;
+      --danger-soft: #2c1814;
+      --code-bg: #0a0b0c;
+      --code-text: #d9d9d3;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1011;
+    --surface: #17181a;
+    --surface-2: #1e2022;
+    --text: #ecece8;
+    --muted: #9a9ea5;
+    --line: #2b2e31;
+    --accent: #5fcf94;
+    --accent-soft: #15291e;
+    --danger: #ef8a76;
+    --danger-soft: #2c1814;
+    --code-bg: #0a0b0c;
+    --code-text: #d9d9d3;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  a { color: inherit; }
+  code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  code { font-size: 0.9em; background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+
+  header.top { border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; }
+  .brand img { width: 28px; height: 28px; }
+  nav a { color: var(--muted); text-decoration: none; margin-left: 20px; font-size: 14px; }
+  nav a:hover { color: var(--text); }
+
+  .hero { padding: 80px 0 56px; }
+  .eyebrow { display: inline-block; font-size: 13px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 4px 10px; border-radius: 999px; margin-bottom: 20px; }
+  h1 { font-size: clamp(34px, 6vw, 56px); line-height: 1.08; letter-spacing: -0.02em; margin: 0 0 20px; max-width: 16ch; }
+  .lede { font-size: 19px; color: var(--muted); max-width: 60ch; margin: 0 0 32px; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-flex; align-items: center; height: 44px; padding: 0 20px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid var(--line); background: var(--surface); }
+  .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .btn:hover { opacity: 0.88; }
+
+  .proof { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 56px; }
+  .proof div { background: var(--surface); padding: 20px; }
+  .proof b { display: block; font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; }
+  .proof span { font-size: 14px; color: var(--muted); }
+
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 30px; letter-spacing: -0.015em; margin: 0 0 12px; }
+  .sub { color: var(--muted); max-width: 64ch; margin: 0 0 32px; }
+
+  .removed { display: grid; gap: 12px; }
+  .row { display: grid; grid-template-columns: 240px 1fr; gap: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; }
+  .row h3 { margin: 0; font-size: 16px; display: flex; align-items: baseline; gap: 8px; }
+  .row h3::before { content: "−"; color: var(--danger); font-weight: 700; }
+  .row .was { color: var(--muted); margin: 0 0 6px; font-size: 15px; }
+  .row .why { margin: 0; font-size: 15px; }
+  .row .why b { color: var(--danger); font-weight: 600; }
+
+  .keep { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .keep div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .keep h3 { margin: 0 0 4px; font-size: 15px; }
+  .keep h3::before { content: "✓ "; color: var(--accent); }
+  .keep p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .verify { display: grid; gap: 16px; }
+  .step { display: grid; grid-template-columns: 32px 1fr; gap: 16px; }
+  .step .n { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; display: grid; place-items: center; font-size: 14px; }
+  .step h3 { margin: 4px 0 6px; font-size: 16px; }
+  .step p { margin: 0 0 10px; color: var(--muted); font-size: 15px; }
+  pre { margin: 0; background: var(--code-bg); color: var(--code-text); padding: 14px 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.55; }
+
+  .limits { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--danger); border-radius: 12px; padding: 24px 28px; }
+  .limits ul { margin: 0; padding-left: 20px; }
+  .limits li { margin: 8px 0; }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
+  footer p { margin: 4px 0; }
+
+  @media (max-width: 760px) {
+    nav { display: none; }
+    .hero { padding: 48px 0 40px; }
+    .proof { grid-template-columns: repeat(2, 1fr); }
+    .row { grid-template-columns: 1fr; gap: 8px; }
+    .keep { grid-template-columns: 1fr; }
+    section { padding: 48px 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="logo.png" alt="" /> herdr-dumb</a>
+    <nav>
+      <a href="#removed">What's removed</a>
+      <a href="#verify">Verify it</a>
+      <a href="#limits">Limits</a>
+      <a href="https://github.com/patbonecrusher/herdr-dumb">GitHub</a>
+      <a href="https://herdr.dev">Upstream herdr.dev</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <span class="eyebrow">Local-only fork of herdr</span>
+    <h1>The agent multiplexer your security team can approve.</h1>
+    <p class="lede">herdr-dumb runs your coding agents in persistent, detachable terminals and tells you which ones need attention, without opening network connections, updating itself, or running third-party code. It is built for locked-down environments such as GCC High.</p>
+    <div class="ctas">
+      <a class="btn primary" href="https://github.com/patbonecrusher/herdr-dumb/releases">Download a release</a>
+      <a class="btn" href="#verify">Verify the claims</a>
+      <a class="btn" href="https://github.com/patbonecrusher/herdr-dumb">Read the source</a>
+    </div>
+
+    <div class="proof">
+      <div><b>0</b><span>networking crates in the dependency tree</span></div>
+      <div><b>0</b><span>TCP/UDP listeners: control is a local socket</span></div>
+      <div><b>0</b><span>ways to load third-party code</span></div>
+      <div><b>0</b><span>self-updates or runtime downloads</span></div>
+    </div>
+  </div>
+
+  <section id="removed">
+    <div class="wrap">
+      <h2>What we took out, and why</h2>
+      <p class="sub">Upstream herdr is a great tool for a laptop. In a regulated environment, every feature that reaches the network, changes the installed software, or runs code from outside the reviewed source is a separate approval. We removed those features instead of asking reviewers to vet them.</p>
+
+      <div class="removed">
+        <div class="row">
+          <h3>SSH machines and remote bridges</h3>
+          <div>
+            <p class="was">Connected to saved SSH hosts, ran a bridge there, and showed remote panes in the local window.</p>
+            <p class="why"><b>Risk:</b> outbound connections and one machine driving terminals on another. A remote-control and data-exfiltration channel.</p>
+          </div>
+        </div>
+        <div class="row">
+          <h3>Self-update and release channels</h3>
+          <div>
+            <p class="was">Downloaded and installed new binaries from GitHub releases.</p>
+            <p class="why"><b>Risk:</b> software that replaces itself. Installed software should change only through a reviewed release.</p>
+          </div>
+        </div>
+        <div class="row">
+          <h3>Detection-rule downloads</h3>
+          <div>
+            <p class="was">Fetched updated agent-detection manifests from the internet at runtime.</p>
+            <p class="why"><b>Risk:</b> behavior that changes after installation. herdr-dumb only uses the rules compiled into the binary.</p>
+          </div>
+        </div>
+        <div class="row">
+          <h3>Plugins and the marketplace</h3>
+          <div>
+            <p class="was">Installed and ran third-party plugin code, plugin panes, and plugin keybinding actions.</p>
+            <p class="why"><b>Risk:</b> unsandboxed code from outside the reviewed source. The runtime, loader, and registry are deleted; legacy plugin requests are rejected.</p>
+          </div>
+        </div>
+        <div class="row">
+          <h3>Clipboard image forwarding</h3>
+          <div>
+            <p class="was">Wrote images pasted from the client to a temp directory and typed the path into the pane.</p>
+            <p class="why"><b>Risk:</b> outside data written to disk and handed to whatever runs in the pane. The message is now ignored.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>What you keep</h2>
+      <p class="sub">Everything that makes herdr useful for agents running on the machine in front of you.</p>
+      <div class="keep">
+        <div><h3>Persistent sessions</h3><p>Close the client and your agents keep working. Reattach any time; layouts restore after a restart.</p></div>
+        <div><h3>Agent status at a glance</h3><p>Every pane is marked working, blocked, or idle, so you never hunt for the agent waiting on you.</p></div>
+        <div><h3>Your existing agents</h3><p>Claude Code, Codex, Cursor, OpenCode and more, unwrapped. herdr-dumb owns the terminals, not the agents.</p></div>
+        <div><h3>Local CLI and API</h3><p>Agents can spawn panes, read output, and wait on each other over a local socket.</p></div>
+        <div><h3>Keyboard and mouse</h3><p>tmux-style prefix keys and click, drag, and split, in the terminal you already use.</p></div>
+        <div><h3>Isolated install</h3><p>Separate <code>herdr-dumb</code> config and state. It never reads or changes an upstream herdr install.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="verify">
+    <div class="wrap">
+      <h2>Don't trust us. Check.</h2>
+      <p class="sub">Every claim on this page can be verified from the public source in a few minutes. These are the checks we suggest to reviewers.</p>
+      <div class="verify">
+        <div class="step"><div class="n">1</div><div>
+          <h3>No networking libraries</h3>
+          <p>List the resolved dependency tree and look for HTTP, TLS, or SSH crates. There are none.</p>
+          <pre>cargo tree -e normal --prefix none | grep -iE 'http|reqwest|ureq|hyper|tls|ssl|ssh|curl'</pre>
+        </div></div>
+        <div class="step"><div class="n">2</div><div>
+          <h3>No sockets on the network</h3>
+          <p>The source opens no TCP or UDP sockets. Client and server talk over a Unix-domain socket on the local machine.</p>
+          <pre>grep -rnE 'TcpStream|TcpListener|UdpSocket' src</pre>
+        </div></div>
+        <div class="step"><div class="n">3</div><div>
+          <h3>No code loading</h3>
+          <p>Plugin commands are gone from the CLI, and plugin API calls return <code>feature_disabled</code>.</p>
+          <pre>$ herdr-dumb plugin list
+unknown command: plugin (plugin support has been removed)</pre>
+        </div></div>
+        <div class="step"><div class="n">4</div><div>
+          <h3>Reproducible, public builds</h3>
+          <p>Release binaries are built by GitHub Actions from tagged commits on <code>master</code>. Windows packaging verifies Microsoft's package and Authenticode signatures, pinned hashes, and static CRT linkage. You can also build from source with <code>just build</code>.</p>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="limits">
+    <div class="wrap">
+      <h2>What herdr-dumb does not do</h2>
+      <p class="sub">Approval decisions need the limits too.</p>
+      <div class="limits">
+        <ul>
+          <li><b>It does not make your agents offline.</b> Coding agents run in herdr-dumb panes and still call their own model APIs. Govern them with your agent and network policy.</li>
+          <li><b>It does not sandbox panes.</b> Programs in panes run as you, with your permissions, exactly as in any terminal.</li>
+          <li><b>It is not certified.</b> Removing features reduces the attack surface; whether it meets your authorization requirements is your organization's decision.</li>
+          <li><b>It does not update itself.</b> Moving to a new version is a manual, reviewable step.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>herdr-dumb is an independent fork of <a href="https://github.com/herdrdev/herdr">herdr</a> and is not affiliated with or endorsed by the herdr project. For the full-featured original, visit <a href="https://herdr.dev">herdr.dev</a>.</p>
+    <p>Licensed under the <a href="https://github.com/patbonecrusher/herdr-dumb/blob/master/LICENSE">Apache License 2.0</a>.</p>
+  </div>
+</footer>
+
+</body>
+</html>

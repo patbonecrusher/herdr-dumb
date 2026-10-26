@@ -1,6 +1,6 @@
 # herdr-dumb
 
-**herdr-dumb** is a locked-down fork of [herdr](https://github.com/herdrdev/herdr) for restricted environments such as Microsoft 365 GCC High. It keeps everything herdr does for agents running on the local machine, and removes the features that let it reach the network, run third-party code, or write data that came in from outside.
+**herdr-dumb** ([project page](https://patbonecrusher.github.io/herdr-dumb/)) is a locked-down fork of [herdr](https://github.com/herdrdev/herdr) ([herdr.dev](https://herdr.dev)) for restricted environments such as Microsoft 365 GCC High. It keeps everything herdr does for agents running on the local machine, and removes the features that let it reach the network, run third-party code, or write data that came in from outside.
 
 The goal is a tool an IT or security reviewer can approve: no remote control, no self-modification, no extension code, and no path for data to leave or enter except through the terminals you open yourself.
 

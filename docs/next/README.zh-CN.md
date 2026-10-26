@@ -1,6 +1,6 @@
 # herdr-dumb
 
-**herdr-dumb** 是 [herdr](https://github.com/herdrdev/herdr) 的精简加固分支，面向 Microsoft 365 GCC High 等受限环境。它保留 herdr 为本机运行的智能体所提供的全部能力，并移除了可访问网络、运行第三方代码或将外部数据写入磁盘的功能。
+**herdr-dumb**（[项目主页](https://patbonecrusher.github.io/herdr-dumb/)）是 [herdr](https://github.com/herdrdev/herdr)（[herdr.dev](https://herdr.dev)）的精简加固分支，面向 Microsoft 365 GCC High 等受限环境。它保留 herdr 为本机运行的智能体所提供的全部能力，并移除了可访问网络、运行第三方代码或将外部数据写入磁盘的功能。
 
 目标是让 IT 或安全审查人员能够批准它：没有远程控制、没有自我修改、没有扩展代码，除了你自己打开的终端之外，数据没有其他进出途径。
 
