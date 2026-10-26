@@ -2,6 +2,30 @@
 
 Terminal based agent runtime for coding agents.
 
+## herdr-dumb security constraints
+
+This repository is herdr-dumb, a fork of Herdr hardened for restricted
+environments (e.g. GCC High). These rules override any upstream guidance and
+apply to every change, including upstream merges.
+
+Do not add or re-enable:
+
+- Network access of any kind: outbound HTTP/TCP/UDP, SSH, remote bridges,
+  telemetry, or a TCP/UDP listener. Control stays on local IPC only.
+- Self-update, release channels, or runtime downloads (binaries, agent
+  detection manifests, plugins, catalogs).
+- Execution of third-party code inside herdr: plugins, scripting hooks,
+  marketplaces, or dynamic loading.
+- Paths that write externally supplied data to disk or inject it into panes,
+  such as clipboard image forwarding.
+- New dependencies that pull in networking, update, or plugin capability.
+
+When merging upstream, check incoming commits for these features and strip
+them. Frozen wire messages and enum ordinals for removed features stay for
+compatibility, but the server must reject or ignore them.
+
+If a change might weaken these guarantees, stop and ask before implementing it.
+
 ## Scope and Audience
 
 These instructions are layered.
