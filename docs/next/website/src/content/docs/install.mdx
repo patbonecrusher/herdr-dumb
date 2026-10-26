@@ -3,7 +3,12 @@ title: Install herdr-dumb
 description: Build and run the local-only fork without self-updates.
 ---
 
-Build from this checkout with Rust, just, and Zig 0.16.0 installed. Upstream installers and package-manager releases install the original Herdr, not this fork.
+Download a prebuilt archive from the [herdr-dumb releases](https://github.com/patbonecrusher/herdr-dumb/releases), or build from this checkout with Rust, just, and Zig 0.16.0 installed. Upstream installers and package-manager releases install the original Herdr, not this fork.
+
+## Download
+
+- `herdr-dumb-windows-x86_64.zip`: extract it and keep the `conpty` directory beside `herdr-dumb.exe`.
+- `herdr-dumb-macos-arm64.tar.gz`: extract it and run `herdr-dumb`.
 
 ## Build
 
@@ -22,8 +27,8 @@ Configuration and saved sessions are isolated under `herdr-dumb` (`herdr-dumb-de
 
 ## Updates
 
-There is no updater, release-channel switch, or detection-manifest downloader. To change versions, build and replace the executable manually. Bundled detection rules and local overrides remain available.
+There is no updater, release-channel switch, or detection-manifest downloader. To change versions, download or build a new release and replace the executable manually. Bundled detection rules and local overrides remain available.
 
 ## Security
 
-Third-party plugins and plugin downloads are removed. Built-in agent integrations, web links, and programs in panes remain available. Herdr uses local IPC, not a TCP/UDP control listener; pane programs are not sandboxed.
+Third-party plugins, plugin downloads, and clipboard image forwarding are removed. Built-in agent integrations, web links, and programs in panes remain available. Herdr uses local IPC, not a TCP/UDP control listener; pane programs are not sandboxed.

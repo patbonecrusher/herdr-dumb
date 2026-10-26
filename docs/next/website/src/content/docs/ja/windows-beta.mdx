@@ -7,23 +7,9 @@ description: ネイティブ Windows 対応、サポートされるワークフ�
 
 Windows 上の Herdr は、Herdr が本来前提としていた Unix の PTY モデルではなく、ConPTY と Windows のプロセス/ランタイム挙動を使います。主要なワークフローの多くはサポートされていますが、一部の機能は Linux/macOS と異なるか、プラットフォームに依存します。残っている差を埋める間、Windows 固有の修正がより多く提供されることがあります。
 
-Windows に Herdr をネイティブインストールするには PowerShell を使います:
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
-```
-
-エンドポイントセキュリティによってこのファイルレス PowerShell コマンドがブロックされる場合は、コマンドプロンプトを開いて次を実行します：
-
-```cmd
-curl.exe -fsSLo install.cmd https://herdr.dev/install.cmd && install.cmd && del install.cmd
-```
+[herdr-dumb のリリース](https://github.com/patbonecrusher/herdr-dumb/releases) から `herdr-dumb-windows-x86_64.zip` をダウンロードして展開し、`conpty` ディレクトリを `herdr-dumb.exe` と同じ場所に置いたままにします。どのターミナルからでも `herdr-dumb` を実行したい場合は、展開したディレクトリを PATH に追加します。herdr-dumb は上流の `herdr.dev` インストーラースクリプトを使いません。
 
 アップデーター、リリースチャンネル切り替え、検出マニフェストのダウンロードはありません。変更する場合は手動でビルドし、実行ファイルを置き換えます。同梱の検出ルールとローカルオーバーライドは利用できます。
-
-インストーラーはリリースを `%USERPROFILE%\.herdr\packages\standalone\releases` に保存し、有効なバージョン付きリリースディレクトリを PATH に追加し、`%LOCALAPPDATA%\Programs\Herdr\bin` を安定した互換エイリアスとして維持します。また、実行中のプロセスがアップデートを妨げないよう少数の古いリリースを保持します。
-
-内部テスト向けに、`HERDR_MANIFEST_URL` でインストーラーを Herdr の安定版/プレビューマニフェストではなくカスタムマニフェストに向けられます。カスタムプレビューマニフェストでは `HERDR_CHANNEL=preview` も設定してください。
 
 ## Windows でサポート
 
@@ -42,6 +28,7 @@ curl.exe -fsSLo install.cmd https://herdr.dev/install.cmd && install.cmd && del 
 | 既知の cwd からの Git/worktree 検出 | サポート済み |
 | システム通知と MP3 サウンド | サポート済み |
 | プラグイン | 削除済み |
+| クリップボード画像ブリッジ | 削除済み |
 | ペイン画面履歴 | サポート済み |
 | ネストされた起動のオーバーライド | サポート済み |
 
@@ -117,10 +104,9 @@ Herdr のペインテキストコピーは Windows で動作します。ペイ�
 | ライブサーバーハンドオフ | 未サポート |
 | Unix ファイルディスクリプタのハンドオフ | 未サポート |
 | Unix フォアグラウンドプロセスグループ | 未サポート |
-| ローカルのネイティブペインでの Herdr クリップボード画像ブリッジ | 未サポート |
 | 署名済みバイナリ / SmartScreen 回避 | 未サポート |
 
-Windows のアップデートは Windows インストーラー経由で行われ、有効なバージョン付きリリースパスを更新します。新しいターミナルまたは再接続した SSH セッションはそのパスを受け取るため、そこで Herdr を起動すると更新済みクライアントを使えます。互換性のある実行中サーバーはペインを動かしたままにします。新しいリリースのサーバー側変更が必要になったときだけ、後からサーバーを再起動してください。ライブハンドオフは Unix 専用です。
+バージョンを変更するには、`herdr-dumb server stop` でサーバーを停止してから、展開したディレクトリを新しいリリースで置き換えます。ライブハンドオフは Unix 専用です。
 
 ## Windows の問題を報告する
 
