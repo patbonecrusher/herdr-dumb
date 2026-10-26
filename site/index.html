@@ -82,6 +82,7 @@
   .btn { display: inline-flex; align-items: center; height: 44px; padding: 0 20px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid var(--line); background: var(--surface); }
   .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
   .btn:hover { opacity: 0.88; }
+  pre.install { margin-top: 20px; display: inline-block; max-width: 100%; }
 
   .proof { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 56px; }
   .proof div { background: var(--surface); padding: 20px; }
@@ -155,6 +156,7 @@
       <a class="btn" href="#verify">Verify the claims</a>
       <a class="btn" href="https://github.com/patbonecrusher/herdr-dumb">Read the source</a>
     </div>
+    <pre class="install">brew install patbonecrusher/tap/herdr-dumb   # macOS, Apple Silicon</pre>
 
     <div class="proof">
       <div><b>0</b><span>networking crates in the dependency tree</span></div>

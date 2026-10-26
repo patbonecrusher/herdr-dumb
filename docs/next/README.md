@@ -70,7 +70,13 @@ https://github.com/user-attachments/assets/043ec09f-4bdd-41d5-aee0-8fda6b83e267
 
 ## install
 
-download the archive for your platform from [releases](https://github.com/patbonecrusher/herdr-dumb/releases):
+on macOS (Apple Silicon) with Homebrew:
+
+```bash
+brew install patbonecrusher/tap/herdr-dumb
+```
+
+or download the archive for your platform from [releases](https://github.com/patbonecrusher/herdr-dumb/releases):
 
 - `herdr-dumb-windows-x86_64.zip` — keep the `conpty` directory beside `herdr-dumb.exe`
 - `herdr-dumb-macos-arm64.tar.gz`

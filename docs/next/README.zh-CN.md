@@ -68,7 +68,13 @@ https://github.com/user-attachments/assets/043ec09f-4bdd-41d5-aee0-8fda6b83e267
 
 ## 安装
 
-从[发布页](https://github.com/patbonecrusher/herdr-dumb/releases)下载适用于你平台的归档：
+在 macOS（Apple Silicon）上使用 Homebrew：
+
+```bash
+brew install patbonecrusher/tap/herdr-dumb
+```
+
+或从[发布页](https://github.com/patbonecrusher/herdr-dumb/releases)下载适用于你平台的归档：
 
 - `herdr-dumb-windows-x86_64.zip`——保持 `conpty` 目录与 `herdr-dumb.exe` 位于同一位置
 - `herdr-dumb-macos-arm64.tar.gz`
